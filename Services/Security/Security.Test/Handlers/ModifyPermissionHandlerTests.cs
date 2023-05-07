@@ -26,11 +26,13 @@ namespace Security.Test.Handlers
         private readonly Permissions _leaveTypeDto;
         private readonly ModifyPermissionHandler _handler;
         private readonly Mock<IKafkaCommandExternal> _mockKafka;
+        private readonly Mock<IElasticSearchCommandExternal> _mockElasticsearch;
 
         public ModifyPermissionHandlerTests()
         {
             _mockUow = MockUnitOfWork.GetUnitOfWork();
             _mockKafka = MockKafka.GetKafka();
+            _mockElasticsearch = MockElasticSearch.GetElasticSearch();
 
             var mapperConfig = new MapperConfiguration(c => 
             {
@@ -38,7 +40,7 @@ namespace Security.Test.Handlers
             });
 
             _mapper = mapperConfig.CreateMapper();
-            _handler = new ModifyPermissionHandler(_mockUow.Object, _mockKafka.Object);
+            _handler = new ModifyPermissionHandler(_mockUow.Object, _mockKafka.Object, _mockElasticsearch.Object);
 
             _leaveTypeDto = new Permissions
             {

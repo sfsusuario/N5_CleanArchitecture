@@ -79,5 +79,12 @@ namespace Security.Presentation.Controllers
                 return BadRequest(exp.Message);
             }
         }
+
+        [HttpGet("Test")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public ActionResult Test()
+        {
+            return Ok("Llamado");
+        }
     }
 }

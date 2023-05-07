@@ -21,13 +21,19 @@ namespace Security.Application.Handlers.CommandHandler
         private readonly IPermissionsCommandRepository _repoCommand;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IKafkaCommandExternal _kafka;
+        private readonly IElasticSearchCommandExternal _elasticSearch;
 
-        public ModifyPermissionHandler(IUnitOfWork unitOfWork, IKafkaCommandExternal kafka)
+        public ModifyPermissionHandler(
+            IUnitOfWork unitOfWork, 
+            IKafkaCommandExternal kafka,
+            IElasticSearchCommandExternal elasticSearch
+        )
         {
             _unitOfWork = unitOfWork;
             _repoQuery = _unitOfWork.PermissionsQueryRepository;
             _repoCommand = _unitOfWork.PermissionsCommandRepository;
             _kafka = kafka;
+            _elasticSearch = elasticSearch;
         }
         
         public async Task<PermissionResponse> Handle(ModifyPermissionCommand request, CancellationToken cancellationToken)
@@ -46,6 +52,15 @@ namespace Security.Application.Handlers.CommandHandler
                 {
                     Id = Guid.NewGuid(),
                     NameOperation = KafkaPermissionActions.MODIFY
+                });
+
+                await _elasticSearch.RequestAsync(new RequestElasticSearchCommand()
+                {
+                    Id = permissionsEntity.Id,
+                    EmployeeForename = permissionsEntity.EmployeeForename,
+                    EmployeeSurname = permissionsEntity.EmployeeSurname,
+                    PermissionDate = permissionsEntity.PermissionDate,
+                    PermissionType = permissionsEntity.PermissionType
                 });
             }
             catch (Exception exp)
