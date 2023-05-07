@@ -1,15 +1,52 @@
 # N5 Challenge
 
-Para compilar webpack y el frontend (react). Asegurarse de tener instalado node.js en su equpo.
+Poryecto con el desarrollo al problem planteado.
 
-1. Ubicarse en la ruta base de ...\Security\Security.Presentation
-2. Ejecutar los siguientes comandos:
+## Archivos de configuración
+Los archivos de configuración para base de datos, kafka y elastic search, se encuentran ubicados en:
 
 ```
-npm run i
-npm run build
+Services/Security/Security.Presentation/appsettings.json
 ```
 
-Despues de ello, ejecutar el proyecto.
+Se encuentran en el siguiente formato:
 
-![image](https://user-images.githubusercontent.com/7690207/169671303-3a26966e-1d61-44ed-850f-2ac8d6f16cf8.png)
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost\\SQLEXPRESS;Database=master;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+  "ProjectConfiguration": {
+    "KafkaConnection": "localhost:9092",
+    "ElasticSearchConnection": "http://localhost:9200"
+  }
+}
+```
+
+
+
+
+## Ubicación del Dockerfile
+El archivo dockerfile para el proyecto se encuentra ubicado en:
+
+```
+Services/Security/Dockerfile
+```
+
+Ejecutar en esa misma ruta de directorio.
+
+## Construir imagen y contenedor
+Para construir y ejecutar el contenedor:
+
+```bash
+cd Services/Security/
+docker build -t security_dotnet .
+docker run -p 5000:80 security_dotnet
+```
