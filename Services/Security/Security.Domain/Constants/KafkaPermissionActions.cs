@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Security.Domain.Constantnts
+namespace Security.Domain.Constants
 {
     public static class KafkaPermissionActions
     {

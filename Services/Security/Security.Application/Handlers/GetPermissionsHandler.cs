@@ -1,5 +1,5 @@
 using MediatR;
-using Security.Domain.Constantnts;
+using Security.Domain.Constants;
 using Security.Domain.Contracts.Persistence;
 using Security.Domain.CQRS.External.Commands;
 using Security.Domain.CQRS.Repository.Queries;

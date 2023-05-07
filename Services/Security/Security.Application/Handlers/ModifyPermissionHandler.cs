@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Security.Domain.CQRS.Repository.Commands;
 using Security.Domain.External.Command;
-using Security.Domain.Constantnts;
+using Security.Domain.Constants;
 using Security.Domain.CQRS.External.Commands;
 
 namespace Security.Application.Handlers.CommandHandler
