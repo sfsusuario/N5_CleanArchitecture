@@ -27,7 +27,6 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: OUTSIDE
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2019-CU3-ubuntu-18.04
     user: '0:0'
