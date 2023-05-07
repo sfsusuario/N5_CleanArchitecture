@@ -32,6 +32,8 @@ services:
       context: ./src/.
       dockerfile: Dockerfile
     image: security_dotnet:latest
+    ports:
+      - "5000:80"
     links: 
      - kafka
     environment:
