@@ -27,6 +27,21 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: OUTSIDE
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2019-CU3-ubuntu-18.04
+    user: '0:0'
+    container_name: sqlserver
+    ports:
+      - 1433:1433
+    links: 
+     - kafka
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: PasswordO1.
+      MSSQL_PID: Express
+    volumes:
+      - ~/docker/sqlserver-data:/var/opt/mssql
   producer:
     build:
       dockerfile: Dockerfile

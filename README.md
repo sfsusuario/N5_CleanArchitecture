@@ -54,6 +54,6 @@ docker run -p 5000:80 security_dotnet
 ## Comando de prueba
 
 ```bash
-curl -X GET -I localhost:5000/api/Permissions/Test
+curl -X GET localhost:5000/api/Permissions/Test
 # debe imprimir "Llamado"
 ```
