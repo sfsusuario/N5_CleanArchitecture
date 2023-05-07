@@ -29,7 +29,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
   producer:
     build:
-      context: ./src/.
       dockerfile: Dockerfile
     image: security_dotnet:latest
     ports:
