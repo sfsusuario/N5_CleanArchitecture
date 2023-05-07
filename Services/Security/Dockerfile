@@ -10,7 +10,7 @@ COPY ["./Security.Application/Security.Application.csproj", "src/Security.Applic
 COPY ["./Security.Domain/Security.Domain.csproj", "src/Security.Domain/"]
 COPY ["./Security.Infrastructure/Security.Infrastructure.csproj", "src/Security.Infrastructure/"]
 COPY ["./Security.Presentation/Security.Presentation.csproj", "src/Security.Presentation/"]
-COPY ["./Security.Presentation/dist/*", "/app/dist"]
+COPY ["./Security.Presentation/dist/index.html", "/app/publish/dist/"]
 
 # run restore over API project - this pulls restore over the dependent projects as well
 RUN dotnet restore "src/Security.Presentation/Security.Presentation.csproj"
