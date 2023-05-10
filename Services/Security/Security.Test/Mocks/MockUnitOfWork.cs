@@ -8,6 +8,9 @@ using System.Threading.Tasks;
 
 namespace Security.Test.Mocks
 {
+    /// <summary>
+    /// Mock unit of work
+    /// </summary>
     public static class MockUnitOfWork
     {
         public static Mock<IUnitOfWork> GetUnitOfWork()

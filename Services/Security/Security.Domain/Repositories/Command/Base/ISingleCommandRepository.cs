@@ -11,6 +11,11 @@ namespace Security.Domain.Repositories.Command.Base
     /// </summary>
     public interface ISingleCommandRepository<T> where T : class
     {
+        /// <summary>
+        /// Request async
+        /// </summary>
+        /// <param name="entity">Entity</param>
+        /// <returns>Type</returns>
         Task<T> RequestAsync(T entity);
     }
 }

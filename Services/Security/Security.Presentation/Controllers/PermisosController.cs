@@ -11,6 +11,9 @@ using System.Threading.Tasks;
 
 namespace Security.Presentation.Controllers
 {
+    /// <summary>
+    /// Application presentation API controller
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class PermissionsController : ControllerBase
@@ -23,6 +26,11 @@ namespace Security.Presentation.Controllers
             _mediator = mediator;
         }
 
+        /// <summary>
+        /// Request permission endpoint
+        /// </summary>
+        /// <param name="command">Request permission command</param>
+        /// <returns>ActionResult</returns>
         [HttpPost("RequestPermission")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult> RequestPermission([FromBody] RequestPermissionCommand command)
@@ -48,6 +56,10 @@ namespace Security.Presentation.Controllers
             }
         }
 
+        /// <summary>
+        /// Get permissions endpoint
+        /// </summary>
+        /// <returns>ActionResult</returns>
         [HttpGet("GetPermissions")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<List<Permissions>> GetPermissions()
@@ -56,6 +68,11 @@ namespace Security.Presentation.Controllers
             return await _mediator.Send(new GetPermissionsQuery());
         }
 
+        /// <summary>
+        /// Modify permission endpoint
+        /// </summary>
+        /// <param name="command">Modify permission command</param>
+        /// <returns>ActionResult</returns>
         [HttpPost("ModifyPermission/{id}")]
         public async Task<ActionResult> ModifyPermission(int id, [FromBody] ModifyPermissionCommand command)
         {
@@ -80,6 +97,10 @@ namespace Security.Presentation.Controllers
             }
         }
 
+        /// <summary>
+        /// Test api endpoint
+        /// </summary>
+        /// <returns>ActionResult</returns>
         [HttpGet("Test")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public ActionResult Test()

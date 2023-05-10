@@ -12,8 +12,19 @@ namespace Security.Domain.Contracts.Persistence
     /// </summary>
     public interface IUnitOfWork: IDisposable
     {
+        /// <summary>
+        /// Permissions query repository
+        /// </summary>
         public IPermissionsQueryRepository PermissionsQueryRepository { get; }
+
+        /// <summary>
+        /// Permissions command repository
+        /// </summary>
         public IPermissionsCommandRepository PermissionsCommandRepository { get; }
+
+        /// <summary>
+        /// Permissions save repository
+        /// </summary>
         public Task Save();
     }
 }

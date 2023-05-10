@@ -42,12 +42,18 @@ namespace HR.LeaveManagement.Persistence.Repositories
         public IPermissionsCommandRepository PermissionsCommandRepository => 
             _permissionCommandRepository ??= new PermissionsCommandRepository(_context);
 
+        /// <summary>
+        /// Dispose unit of work
+        /// </summary>
         public void Dispose()
         {
             _context.Dispose();
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Save unit of work
+        /// </summary>
         public async Task Save() 
         {
             await _context.SaveChangesAsync();

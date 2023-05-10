@@ -13,6 +13,9 @@ using Security.Domain.CQRS.External.Commands;
 
 namespace Security.Application.Handlers.CommandHandler
 {
+    /// <summary>
+    /// Request permission handler
+    /// </summary>
     public class RequestPermissionHandler : IRequestHandler<RequestPermissionCommand, PermissionResponse>
     {
         private readonly IPermissionsQueryRepository _repoQuery;
@@ -21,6 +24,12 @@ namespace Security.Application.Handlers.CommandHandler
         private readonly IKafkaCommandExternal _kafka;
         private readonly IElasticSearchCommandExternal _elasticSearch;
 
+        /// <summary>
+        /// RequestPermissionHandler constructor
+        /// </summary>
+        /// <param name="unitOfWork">UnitOfWork instance</param>
+        /// <param name="kafka">Kafka instance</param>
+        /// <param name="elasticSearch">ElasticSearch instance</param>
         public RequestPermissionHandler(
             IUnitOfWork unitOfWork, 
             IKafkaCommandExternal kafka,
@@ -34,6 +43,12 @@ namespace Security.Application.Handlers.CommandHandler
             _elasticSearch = elasticSearch;
         }
 
+        /// <summary>
+        /// Handle function
+        /// </summary>
+        /// <param name="request">Request</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns></returns>
         public async Task<PermissionResponse> Handle(RequestPermissionCommand request, CancellationToken cancellationToken)
         {
             var permissionsEntity = PermissionsMapper.Mapper.Map<Permissions>(request);

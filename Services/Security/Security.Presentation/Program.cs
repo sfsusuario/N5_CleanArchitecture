@@ -14,13 +14,8 @@ using Security.Domain.Contracts.Persistence;
 using HR.LeaveManagement.Persistence.Repositories;
 using Security.Domain.External.Command;
 using Security.Infrastructure.External.Command;
-using Confluent.Kafka;
 using Serilog;
-using Microsoft.Extensions.Configuration;
 using Security.Domain.Entities.Config;
-using Elasticsearch.Net;
-using static System.Reflection.Metadata.BlobBuilder;
-using Nest;
 using Security.Domain.External.Command.Base;
 using Security.Infrastructure.Data;
 //using Microsoft.Extensions.DependencyInjection.Abstractions;
@@ -36,22 +31,22 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddRazorPages();
 builder.Services.AddMvc();
 
+// Configure SQL server
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<SecurityContext>( options => options.UseSqlServer(connectionString));
 builder.Services.Configure<ProjectConfiguration>(builder.Configuration.GetSection(nameof(ProjectConfiguration)));
 
 // Register dependencies
-//builder.Services.AddMediatR(typeof(CreateCustomerHandler).GetTypeInfo().Assembly);
 builder.Services.AddMediatR(typeof(ModifyPermissionHandler).GetTypeInfo().Assembly);
 builder.Services.AddScoped(typeof(IQueryRepository<>), typeof(QueryRepository<>));
-//builder.Services.AddTransient<ICustomerQueryRepository, CustomerQueryRepository>();
 builder.Services.AddScoped(typeof(ICommandExternal<>), typeof(CommandRepository<>));
-//builder.Services.AddTransient<ICustomerCommandRepository, CustomerCommandRepository>();
 
+// Configure unit of work
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddTransient<IPermissionsQueryRepository, PermissionsQueryRepository>();
 builder.Services.AddTransient<IPermissionsCommandRepository, PermissionsCommandRepository>();
 
+/// Configure Kafka
 builder.Services.AddTransient<IKafkaCommandExternal, KafkaCommandExternal>();
 builder.Services.AddTransient<IElasticSearchCommandExternal, ElasticSearchCommandExternal>();
 

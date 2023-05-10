@@ -13,6 +13,9 @@ namespace Security.Domain.Entities
     [Table("PermissionTypes")]
     public class PermissionsType: BaseEntity
     {
+        /// <summary>
+        /// Permission description
+        /// </summary>
         public string? Description { get; set; }
     }
 }

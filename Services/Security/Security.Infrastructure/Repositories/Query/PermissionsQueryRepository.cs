@@ -18,6 +18,11 @@ namespace Security.Infrastructure.Repository.Query
     /// </summary>
     public class PermissionsQueryRepository : QueryRepository<Permissions>, IPermissionsQueryRepository
     {
+        /// <summary>
+        /// Permissions query repository constructor
+        /// </summary>
+        /// <param name="configuration">Configuration</param>
+        /// <param name="context">Security context instance</param>
         public PermissionsQueryRepository(IConfiguration configuration, SecurityContext context) 
             : base(configuration, context)
         {

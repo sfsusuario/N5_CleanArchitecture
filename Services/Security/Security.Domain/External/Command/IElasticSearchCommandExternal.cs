@@ -8,6 +8,9 @@ using System.Threading.Tasks;
 
 namespace Security.Domain.External.Command
 {
+    /// <summary>
+    /// Interface elastic search command external
+    /// </summary>
     public interface IElasticSearchCommandExternal : ISingleCommandRepository<RequestElasticSearchCommand>
     {
     }

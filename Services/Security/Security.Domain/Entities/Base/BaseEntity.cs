@@ -9,6 +9,9 @@ namespace Security.Domain.Entities.Base
     /// </summary>
     public class BaseEntity
     {
+        /// <summary>
+        /// Identifier base entity
+        /// </summary>
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public Int32 Id { get; set; }

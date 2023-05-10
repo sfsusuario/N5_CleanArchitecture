@@ -5,8 +5,14 @@ using Security.Domain.Entities;
 
 namespace Security.Application.Mapper
 {
+    /// <summary>
+    /// Security mapping profile configuration
+    /// </summary>
     public class SecurityMappingProfile : Profile
     {
+        /// <summary>
+        /// Setup configuration
+        /// </summary>
         public SecurityMappingProfile()
         {
             CreateMap<Permissions, PermissionResponse>().ReverseMap();

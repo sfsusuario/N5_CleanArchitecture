@@ -15,10 +15,20 @@ using Security.Domain.Entities.Config;
 
 namespace Security.Infrastructure.External.Command
 {
+    /// <summary>
+    /// Kafka command external logic
+    /// </summary>
     public class KafkaCommandExternal : IKafkaCommandExternal
     {
+        /// <summary>
+        /// Kadka instance
+        /// </summary>
         private IProducer<Null, string> _producer;
 
+        /// <summary>
+        /// KafkaCommandExternal constructor
+        /// </summary>
+        /// <param name="options">Project configuration</param>
         public KafkaCommandExternal(IOptions<ProjectConfiguration> options) {
 
             var config = new ProducerConfig
@@ -29,6 +39,11 @@ namespace Security.Infrastructure.External.Command
             _producer = new ProducerBuilder<Null, string>(config).Build();
         }
 
+        /// <summary>
+        /// Request to elastic search
+        /// </summary>
+        /// <param name="entity">Commmand entity</param>
+        /// <returns>Command response</returns>
         public async Task<RequestKafkaCommand> RequestAsync(RequestKafkaCommand entity)
         {
             var result = await this._producer.ProduceAsync("my_custom_topic", new Message<Null, string> { 

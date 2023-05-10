@@ -13,9 +13,20 @@ using Security.Domain.External.Command;
 
 namespace Security.Infrastructure.External.Command
 {
+    /// <summary>
+    /// Elastic search command external logic
+    /// </summary>
     public class ElasticSearchCommandExternal : IElasticSearchCommandExternal
     {
+        /// <summary>
+        /// Elastic search instance 
+        /// </summary>
         private readonly ElasticClient _client;
+
+        /// <summary>
+        /// ElasticSearchCommandExternal constructor
+        /// </summary>
+        /// <param name="options">Project configuration</param>
         public ElasticSearchCommandExternal(IOptions<ProjectConfiguration> options) {
 
             // Elastic search
@@ -28,6 +39,11 @@ namespace Security.Infrastructure.External.Command
             }
         }
 
+        /// <summary>
+        /// Request to elastic search
+        /// </summary>
+        /// <param name="entity">Commmand entity</param>
+        /// <returns>Command response</returns>
         public async Task<RequestElasticSearchCommand> RequestAsync(RequestElasticSearchCommand entity)
         {
             await _client.IndexDocumentAsync(entity);

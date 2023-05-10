@@ -10,6 +10,9 @@ using System.Threading.Tasks;
 
 namespace Security.Test.Mocks
 {
+    /// <summary>
+    /// Mock permissions repository
+    /// </summary>
     public static class MockPermissionsRepository
     {
         public static Mock<IPermissionsQueryRepository> PermissionsQueryRepository()

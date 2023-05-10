@@ -10,8 +10,15 @@ namespace Security.Infrastructure.Data
     /// </summary>
     public class DbConnector
     {
+        /// <summary>
+        /// Connection configuration
+        /// </summary>
         private readonly IConfiguration _configuration;
 
+        /// <summary>
+        /// Constructor for DbConnector
+        /// </summary>
+        /// <param name="configuration">Configuration object</param>
         protected DbConnector(IConfiguration configuration)
         {
             _configuration = configuration;

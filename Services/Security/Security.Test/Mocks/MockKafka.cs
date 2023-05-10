@@ -10,6 +10,9 @@ using System.Threading.Tasks;
 
 namespace Security.Test.Mocks
 {
+    /// <summary>
+    /// Mock kafka basic
+    /// </summary>
     public static class MockKafka
     {
         public static Mock<IKafkaCommandExternal> GetKafka()

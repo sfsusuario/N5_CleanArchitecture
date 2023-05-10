@@ -13,13 +13,29 @@ namespace Security.Domain.Entities
     [Table("Permissions")]
     public class Permissions: BaseEntity
     {
+        /// <summary>
+        /// Employee forename
+        /// </summary>
         public string? EmployeeForename { get; set; }
+
+        /// <summary>
+        /// Employee surname
+        /// </summary>
         public string? EmployeeSurname { get; set; }
 
+        /// <summary>
+        /// Employee permission type
+        /// </summary>
         public int PermissionType { get; set; }
+
+        /// <summary>
+        /// Employee permission date
+        /// </summary>
         public DateTime PermissionDate { get; set; }
 
-        // Relationship
+        /// <summary>
+        /// Employee permission type relationship
+        /// </summary>
         [ForeignKey("PermissionType")]
         public PermissionsType? PermissionTypeRef { get; set; }
     }

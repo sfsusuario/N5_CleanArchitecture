@@ -10,6 +10,10 @@ namespace Security.Infrastructure.Repository.Command
     /// </summary>
     public class PermissionsCommandRepository : CommandRepository<Permissions>, IPermissionsCommandRepository
     {
+        /// <summary>
+        /// Permissions repositort constructor
+        /// </summary>
+        /// <param name="context">Security context repository container</param>
         public PermissionsCommandRepository(SecurityContext context) : base(context)
         {
 

@@ -8,6 +8,9 @@ using System.Threading.Tasks;
 
 namespace Security.Test.Mocks
 {
+    /// <summary>
+    /// Mock elastic search basic
+    /// </summary>
     public class MockElasticSearch
     {
         public static Mock<IElasticSearchCommandExternal> GetElasticSearch()
