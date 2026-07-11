@@ -11,6 +11,11 @@
       el contenedor (sin tocar tu SQL Server local, si tuvieras uno).
     - Verifica que la API responda y abre el frontend en el navegador.
 
+    Nota: el backend se publica en el host en el puerto 5080 (no 5000). En muchas maquinas
+    Windows con Hyper-V/WSL2, el puerto 5000 cae dentro de un rango reservado por el sistema
+    ('netsh interface ipv4 show excludedportrange protocol=tcp'), lo que hace fallar el mapeo
+    de puertos de Docker con un error de permisos de socket.
+
 .PARAMETER SkipBrowser
     No abrir el navegador automaticamente al finalizar.
 
@@ -42,6 +47,30 @@ function Test-CommandExists {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Invoke-NativeCommandQuiet {
+    <#
+        Runs a native command with all output suppressed and returns its exit code.
+        With $ErrorActionPreference = 'Stop' (set for this whole script) PowerShell 5.1 wraps
+        every stderr line from a REDIRECTED native command into a terminating NativeCommandError
+        - even when the command is expected to "fail" as part of normal control flow, like a
+        readiness probe. Temporarily switching to 'Continue' around the call avoids that, while
+        still returning $LASTEXITCODE so callers can check success/failure themselves.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [Parameter(ValueFromRemainingArguments)][string[]]$ArgumentList
+    )
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $FilePath @ArgumentList *> $null
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    return $LASTEXITCODE
+}
+
 # 1. Prerequisitos ------------------------------------------------------------
 Write-Step "Verificando prerequisitos"
 
@@ -50,8 +79,8 @@ if (-not (Test-CommandExists 'docker')) {
     exit 1
 }
 
-docker info *> $null
-if ($LASTEXITCODE -ne 0) {
+$dockerExitCode = Invoke-NativeCommandQuiet -FilePath 'docker' -ArgumentList 'info'
+if ($dockerExitCode -ne 0) {
     Write-Host "Docker Desktop no parece estar corriendo. Abrelo y vuelve a ejecutar este script." -ForegroundColor Red
     exit 1
 }
@@ -97,8 +126,10 @@ $sqlReady = $false
 
 while ($attempt -lt $maxAttempts -and -not $sqlReady) {
     $attempt++
-    docker compose exec -T sqlserver /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $SqlSaPassword -Q "SELECT 1" *> $null
-    if ($LASTEXITCODE -eq 0) {
+    $probeExitCode = Invoke-NativeCommandQuiet -FilePath 'docker' -ArgumentList `
+        'compose', 'exec', '-T', 'sqlserver', '/opt/mssql-tools/bin/sqlcmd', `
+        '-S', 'localhost', '-U', 'sa', '-P', $SqlSaPassword, '-Q', 'SELECT 1'
+    if ($probeExitCode -eq 0) {
         $sqlReady = $true
     }
     else {
@@ -136,7 +167,7 @@ $maxApiAttempts = 20
 $apiReady = $false
 for ($i = 0; $i -lt $maxApiAttempts -and -not $apiReady; $i++) {
     try {
-        $response = Invoke-WebRequest -Uri 'http://localhost:5000/api/Permissions/Test' -UseBasicParsing -TimeoutSec 3
+        $response = Invoke-WebRequest -Uri 'http://localhost:5080/api/Permissions/Test' -UseBasicParsing -TimeoutSec 3
         if ($response.StatusCode -eq 200) {
             $apiReady = $true
         }
@@ -147,7 +178,7 @@ for ($i = 0; $i -lt $maxApiAttempts -and -not $apiReady; $i++) {
 }
 
 if ($apiReady) {
-    Write-Host "API respondiendo en http://localhost:5000" -ForegroundColor Green
+    Write-Host "API respondiendo en http://localhost:5080" -ForegroundColor Green
 }
 else {
     Write-Host "La API todavia no respondio a tiempo; puede seguir iniciando. Revisa 'docker compose logs producer'." -ForegroundColor Yellow
@@ -162,7 +193,7 @@ if (-not $SkipBrowser) {
 Write-Host ""
 Write-Host "Listo. Servicios disponibles:" -ForegroundColor Cyan
 Write-Host "  Frontend:  http://localhost:3000"
-Write-Host "  API:       http://localhost:5000/api/Permissions/Test"
+Write-Host "  API:       http://localhost:5080/api/Permissions/Test"
 Write-Host "  ElasticSearch: http://localhost:9200"
 Write-Host ""
 Write-Host "Para ver logs:   docker compose logs -f [servicio]"

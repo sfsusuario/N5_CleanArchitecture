@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Button, Card, Col, Form, Row } from "react-bootstrap";
-import type { Permission } from "../types/permission";
+import type { Permission, PermissionType } from "../types/permission";
 
 export interface PermissionFormValues {
   employeeForename: string;
@@ -12,6 +12,8 @@ export interface PermissionFormValues {
 interface PermissionFormProps {
   editingPermission: Permission | null;
   submitting: boolean;
+  permissionTypes: PermissionType[];
+  permissionTypesLoading: boolean;
   onSubmit: (values: PermissionFormValues, editingId: number | null) => void;
   onCancelEdit: () => void;
 }
@@ -19,13 +21,15 @@ interface PermissionFormProps {
 const emptyForm: PermissionFormValues = {
   employeeForename: "",
   employeeSurname: "",
-  permissionType: 1,
+  permissionType: 0,
   permissionDate: new Date().toISOString().slice(0, 10),
 };
 
 export function PermissionForm({
   editingPermission,
   submitting,
+  permissionTypes,
+  permissionTypesLoading,
   onSubmit,
   onCancelEdit,
 }: PermissionFormProps) {
@@ -80,14 +84,22 @@ export function PermissionForm({
             </Col>
             <Col md={6}>
               <Form.Group controlId="permissionType">
-                <Form.Label>Tipo de permiso (Id)</Form.Label>
-                <Form.Control
-                  type="number"
-                  min={1}
+                <Form.Label>Tipo de permiso</Form.Label>
+                <Form.Select
                   required
-                  value={values.permissionType}
+                  disabled={permissionTypesLoading}
+                  value={values.permissionType || ""}
                   onChange={(e) => setValues({ ...values, permissionType: Number(e.target.value) })}
-                />
+                >
+                  <option value="" disabled hidden>
+                    {permissionTypesLoading ? "Cargando…" : "Seleccionar…"}
+                  </option>
+                  {permissionTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.description ?? `Tipo #${type.id}`}
+                    </option>
+                  ))}
+                </Form.Select>
               </Form.Group>
             </Col>
             <Col md={6}>

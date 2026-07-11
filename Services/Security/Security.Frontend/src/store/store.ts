@@ -1,6 +1,7 @@
 import { configureStore } from "@reduxjs/toolkit";
 import createSagaMiddleware from "redux-saga";
 import permissionsReducer from "./permissions/permissionsSlice";
+import permissionTypesReducer from "./permissionTypes/permissionTypesSlice";
 import { rootSaga } from "./rootSaga";
 
 const sagaMiddleware = createSagaMiddleware();
@@ -8,6 +9,7 @@ const sagaMiddleware = createSagaMiddleware();
 export const store = configureStore({
   reducer: {
     permissions: permissionsReducer,
+    permissionTypes: permissionTypesReducer,
   },
   // Async flow is handled entirely by sagas here, so the default thunk middleware is dropped
   // in favor of sagaMiddleware — keeps a single, explicit place for side effects.

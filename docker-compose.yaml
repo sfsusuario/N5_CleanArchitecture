@@ -1,4 +1,3 @@
-version: '3'
 services:
   zookeeper:
     image: wurstmeister/zookeeper
@@ -27,6 +26,18 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: OUTSIDE
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    hostname: kafka-ui
+    ports:
+      - "8080:8080"
+    links:
+     - kafka
+     - zookeeper
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2019-CU3-ubuntu-18.04
     user: '0:0'
@@ -42,7 +53,12 @@ services:
     volumes:
       - ~/docker/sqlserver-data:/var/opt/mssql
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.5
+    # Pinned to a later 7.17.x patch (not 7.17.5) because that tag's bundled JDK crashes on
+    # startup under cgroups v2 (common on Docker Desktop + WSL2): "NullPointerException:
+    # Cannot invoke CgroupInfo.getMountPoint() because anyController is null" in
+    # JvmOptionsParser. Same major.minor as NEST/Elasticsearch.Net 7.17.5, so the REST API
+    # the client talks to is unchanged — only the container's internal JDK differs.
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.28
     hostname: elasticsearch
     environment:
       discovery.type: single-node
@@ -56,7 +72,7 @@ services:
       dockerfile: Dockerfile
     image: security_dotnet:latest
     ports:
-      - "5000:80"
+      - "5080:80"
     links:
      - kafka
      - sqlserver
@@ -73,8 +89,9 @@ services:
       dockerfile: Dockerfile
       args:
         # Runs in the browser on the host, not inside the Docker network, so it must use the
-        # host-mapped port of `producer` (localhost:5000), not the internal hostname.
-        VITE_API_BASE_URL: "http://localhost:5000"
+        # host-mapped port of `producer` (localhost:5080 — see comment in setup.ps1/DOCUMENTATION.md
+        # on why not 5000: it collides with a Windows/Hyper-V reserved port range on some machines).
+        VITE_API_BASE_URL: "http://localhost:5080"
     image: security_frontend:latest
     ports:
       - "3000:80"

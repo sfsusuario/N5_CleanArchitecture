@@ -42,7 +42,7 @@ Security.Frontend/src/
 └── components/                        Layout, PermissionsList, PermissionForm
 ```
 
-Funcionalidad: lista de permisos (`GetPermissions`), alta (`RequestPermission`) y edición (`ModifyPermission`) desde un único formulario, con recarga automática de la lista tras cada operación exitosa (la saga despacha `fetchPermissionsRequested` al finalizar).
+Funcionalidad: lista de permisos (`GetPermissions`), alta (`RequestPermission`) y edición (`ModifyPermission`) desde un único formulario, con recarga automática de la lista tras cada operación exitosa (la saga despacha `fetchPermissionsRequested` al finalizar). El campo "Tipo de permiso" es un `<select>` poblado desde `GET /api/PermissionTypes` (`permissionTypesSlice`/`permissionTypesSaga`, mismo patrón que `permissions`) en vez de un Id numérico libre.
 
 Referencias de proyecto (siempre hacia adentro):
 
@@ -138,14 +138,14 @@ Para detener todo: `docker compose down`. Para ver logs de un servicio puntual: 
 docker compose up          # desde la raíz del repositorio
 ```
 
-Las cadenas de conexión del contenedor `producer` se pasan por variables de entorno en `docker-compose.yaml` apuntando a los hostnames internos de la red de Docker (no a `localhost`); el `frontend`, en cambio, corre en el navegador del host, así que su `VITE_API_BASE_URL` apunta a `http://localhost:5000` (el puerto mapeado de `producer`), no a un hostname interno de Docker.
+Las cadenas de conexión del contenedor `producer` se pasan por variables de entorno en `docker-compose.yaml` apuntando a los hostnames internos de la red de Docker (no a `localhost`); el `frontend`, en cambio, corre en el navegador del host, así que su `VITE_API_BASE_URL` apunta a `http://localhost:5080` (el puerto mapeado de `producer`), no a un hostname interno de Docker.
 
 La primera vez, aplicar las migraciones de EF Core contra el SQL Server del contenedor (ver comando en la Opción B, con `--connection "Server=localhost,1433;Database=SecurityDb;User Id=sa;Password=PasswordO1.;TrustServerCertificate=True"`).
 
 Probar:
 
 ```bash
-curl -X GET localhost:5000/api/Permissions/Test
+curl -X GET localhost:5080/api/Permissions/Test
 # debe imprimir "Llamado"
 ```
 
@@ -181,7 +181,7 @@ Los tests son unitarios (handlers, controller, mapeo AutoMapper) más tests de r
 ```bash
 cd Services/Security
 docker build -t security_dotnet .
-docker run -p 5000:80 security_dotnet
+docker run -p 5080:80 security_dotnet
 ```
 
 ### Frontend — modo desarrollo (sin Docker)
@@ -190,7 +190,7 @@ Requisitos: Node.js 20+.
 
 ```bash
 cd Services/Security/Security.Frontend
-cp .env.example .env      # ajustar VITE_API_BASE_URL si el backend no corre en localhost:5000
+cp .env.example .env      # ajustar VITE_API_BASE_URL si el backend no corre en localhost:5080
 npm install
 npm run dev                # sirve en http://localhost:5173 con hot-reload
 ```
@@ -201,7 +201,7 @@ El backend debe estar corriendo (Opción A o B) y permitir el origen `http://loc
 
 ```bash
 cd Services/Security/Security.Frontend
-docker build -t security_frontend --build-arg VITE_API_BASE_URL=http://localhost:5000 .
+docker build -t security_frontend --build-arg VITE_API_BASE_URL=http://localhost:5080 .
 docker run -p 3000:80 security_frontend
 ```
 
@@ -215,5 +215,4 @@ docker run -p 3000:80 security_frontend
 - **Validación de negocio limitada**: los validadores de FluentValidation comprueban campos vacíos/formato, pero no verifican contra la base de datos que `PermissionType` exista en `PermissionTypes` (evita acoplar `Security.Application` a `Security.Infrastructure`).
 - **Sin purga del outbox**: las filas de `OutboxMessages` ya procesadas se quedan en la tabla indefinidamente. Un job de limpieza periódico (borrar filas con `ProcessedAt` de hace más de N días) sería lo esperable en producción.
 - **CORS con orígenes hardcodeados**: `FrontendCorsPolicy` en `Program.cs` permite explícitamente `localhost:5173`/`localhost:3000`. Para un dominio de producción real habría que mover esos orígenes a `appsettings.json`/variables de entorno en vez de tenerlos fijos en el código.
-- **`PermissionType` como número libre en el frontend**: el formulario pide el Id del tipo de permiso como número porque la API no expone un endpoint para listar `PermissionTypes` — un futuro `GET /api/PermissionTypes` permitiría reemplazarlo por un `<select>`.
 - **Sin tests de frontend**: no se agregaron tests (Vitest/RTL) para los componentes React ni para las sagas — fuera de alcance de esta iteración, mencionado aquí como gap conocido.

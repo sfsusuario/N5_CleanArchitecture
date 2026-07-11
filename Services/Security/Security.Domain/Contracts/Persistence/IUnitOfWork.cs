@@ -23,6 +23,11 @@ namespace Security.Domain.Contracts.Persistence
         public IPermissionsCommandRepository PermissionsCommandRepository { get; }
 
         /// <summary>
+        /// Permission types query repository (lookup table for RequestPermission/ModifyPermission)
+        /// </summary>
+        public IPermissionTypesQueryRepository PermissionTypesQueryRepository { get; }
+
+        /// <summary>
         /// Outbox repository. Handlers write to this instead of calling Kafka/Elasticsearch
         /// directly, so the notification is committed atomically with the business change.
         /// </summary>

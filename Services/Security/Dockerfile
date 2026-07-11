@@ -32,6 +32,6 @@ RUN ls -l
 ENTRYPOINT [ "dotnet", "Security.Presentation.dll" ]
 
 #docker build -t security_dotnet .
-#docker run -p 5000:80 security_dotnet
-#test: curl -X GET localhost:5000/api/Permissions/Test 
+#docker run -p 5080:80 security_dotnet
+#test: curl -X GET localhost:5080/api/Permissions/Test
 #prints "Llamado"
