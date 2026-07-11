@@ -6,7 +6,7 @@ Para el detalle de arquitectura, patrones de diseño utilizados y guía de despl
 
 ## Levantar todo con un solo comando
 
-El `docker-compose.yaml` en la raíz del repositorio centraliza la ejecución de toda la aplicación: frontend, backend y sus dependencias (PostgreSQL, Kafka, Kafka UI, Elasticsearch), cada una en su propio contenedor.
+El `docker-compose.yaml` en la raíz del repositorio centraliza la ejecución de toda la aplicación: frontend, backend y sus dependencias (PostgreSQL, Kafka, Kafka UI, Elasticsearch, Kibana), cada una en su propio contenedor.
 
 ```powershell
 .\setup.ps1

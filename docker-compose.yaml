@@ -71,6 +71,17 @@ services:
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
       - "9200:9200"
+  kibana:
+    # Pinned to the exact same 7.17.28 tag as elasticsearch above — Kibana refuses to start
+    # (or misbehaves) against an Elasticsearch of a different minor/patch version.
+    image: docker.elastic.co/kibana/kibana:7.17.28
+    hostname: kibana
+    ports:
+      - "5601:5601"
+    links:
+     - elasticsearch
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
   producer:
     build:
       context: ./Services/Security

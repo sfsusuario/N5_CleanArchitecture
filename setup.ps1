@@ -5,8 +5,8 @@
 .DESCRIPTION
     - Verifica que Docker Desktop y el .NET SDK esten disponibles (instala la herramienta
       dotnet-ef si falta).
-    - Construye y levanta todo el stack con Docker Compose: zookeeper, kafka, postgres,
-      elasticsearch, el backend (producer) y el frontend.
+    - Construye y levanta todo el stack con Docker Compose: zookeeper, kafka, kafka-ui, postgres,
+      elasticsearch, kibana, el backend (producer) y el frontend.
     - Espera a que PostgreSQL acepte conexiones y aplica las migraciones de EF Core contra
       el contenedor (publicado en el host en el puerto 5433, no 5432, para no chocar con un
       PostgreSQL local si ya tuvieras uno instalado).
@@ -111,7 +111,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Step "Levantando el stack (zookeeper, kafka, postgres, elasticsearch, backend, frontend)"
+Write-Step "Levantando el stack (zookeeper, kafka, kafka-ui, postgres, elasticsearch, kibana, backend, frontend)"
 docker compose up -d
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Fallo 'docker compose up'. Revisa el mensaje de arriba." -ForegroundColor Red
@@ -196,6 +196,7 @@ Write-Host "  Frontend:      http://localhost:3000"
 Write-Host "  API:           http://localhost:5080/api/Permissions/Test"
 Write-Host "  Kafka UI:      http://localhost:8080"
 Write-Host "  ElasticSearch: http://localhost:9200"
+Write-Host "  Kibana:        http://localhost:5601"
 Write-Host "  PostgreSQL:    localhost:5433 (db SecurityDb, user postgres)"
 Write-Host ""
 Write-Host "Para ver logs:   docker compose logs -f [servicio]"

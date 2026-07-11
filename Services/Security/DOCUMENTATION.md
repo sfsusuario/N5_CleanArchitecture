@@ -95,6 +95,8 @@ Kafka topic "mytopic" / índice Elasticsearch "permissions" actualizados
 
 PostgreSQL es la única fuente de verdad transaccional. Gracias al patrón Outbox, un `RequestPermission`/`ModifyPermission` exitoso ya no depende de que Kafka o Elasticsearch estén disponibles en ese instante — sus notificaciones quedan garantizadas por el `OutboxDispatcherService`, que reintenta indefinidamente hasta lograr entregarlas.
 
+**Herramientas de observabilidad** (no las usa la app, son para inspeccionar el stack a mano): **Kafka UI** en `http://localhost:8080` (topics, mensajes, consumer groups de `mytopic`) y **Kibana** en `http://localhost:5601` (explorar/buscar los documentos indexados en el índice `permissions` de Elasticsearch — Dev Tools → Console y correr `GET permissions/_search`). Ambas apuntan al mismo `kafka`/`elasticsearch` que usa el backend, pinneadas a la misma versión (`7.17.28`) que Elasticsearch para evitar problemas de compatibilidad entre Kibana y el cluster.
+
 > **Nota de diseño — por qué PostgreSQL y no SQL Server**: el proyecto originalmente usaba SQL Server, pero su imagen de Linux (`sqlpal`, la capa de emulación de APIs de Windows que usan *todas* las variantes de SQL Server para contenedores, incluida Azure SQL Edge) resultó incompatible con Docker Desktop/WSL2 en algunas máquinas — crasheaba al iniciar sin importar la versión probada (2019, 2022, Azure SQL Edge). PostgreSQL es un binario Linux nativo sin esa capa de compatibilidad, arranca en segundos, y el esquema de este proyecto (3 tablas simples, sin stored procedures ni features específicas de T-SQL) migró sin fricción. Un efecto colateral del cambio: `PermissionDate` se mapea explícitamente como `date` de Postgres (no `timestamp with time zone`) en `SecurityContext.OnModelCreating`, porque Npgsql 6+ exige que todo `DateTime` escrito en una columna `timestamptz` tenga `Kind = Utc`, y la fecha que manda el frontend no lo tiene — mapearla como `date` evita el problema de raíz y es semánticamente más correcto para un dato que no tiene componente horario.
 
 ## 2. Patrones de diseño y ubicación en el código
@@ -117,7 +119,7 @@ PostgreSQL es la única fuente de verdad transaccional. Gracias al patrón Outbo
 
 ### Opción A — `setup.ps1` (recomendado: todo automatizado)
 
-El `docker-compose.yaml` que centraliza la ejecución de toda la aplicación (frontend, backend y sus 4 dependencias — PostgreSQL, Kafka, Elasticsearch, Zookeeper, cada una en su propio contenedor) vive en la **raíz del repositorio**. `setup.ps1` (también en la raíz) automatiza todo el flujo sobre ese archivo:
+El `docker-compose.yaml` que centraliza la ejecución de toda la aplicación (frontend, backend y sus 6 dependencias — PostgreSQL, Kafka, Zookeeper, Kafka UI, Elasticsearch, Kibana, cada una en su propio contenedor) vive en la **raíz del repositorio**. `setup.ps1` (también en la raíz) automatiza todo el flujo sobre ese archivo:
 
 ```powershell
 .\setup.ps1
@@ -126,13 +128,13 @@ El `docker-compose.yaml` que centraliza la ejecución de toda la aplicación (fr
 Paso a paso, el script:
 
 1. Verifica que Docker Desktop esté corriendo y que el .NET SDK esté instalado (instala la herramienta `dotnet-ef` si falta).
-2. `docker compose build` + `docker compose up -d` — construye y levanta los 6 contenedores.
+2. `docker compose build` + `docker compose up -d` — construye y levanta los 8 contenedores.
 3. Espera (con reintentos) a que PostgreSQL acepte conexiones dentro del contenedor.
 4. Aplica las migraciones de EF Core contra ese PostgreSQL (`dotnet ef database update --connection "Host=localhost;Port=5433;..."`, sin tocar ningún PostgreSQL local que tengas instalado — el contenedor publica en el puerto 5433 del host, no el 5432 por defecto, justamente para evitar ese choque).
 5. Verifica que `GET /api/Permissions/Test` responda 200.
 6. Abre `http://localhost:3000` en el navegador (usar `-SkipBrowser` para omitir este paso).
 
-Para detener todo: `docker compose down`. Para ver logs de un servicio puntual: `docker compose logs -f <servicio>` (`producer`, `frontend`, `postgres`, `kafka`, `kafka-ui`, `elasticsearch`, `zookeeper`).
+Para detener todo: `docker compose down`. Para ver logs de un servicio puntual: `docker compose logs -f <servicio>` (`producer`, `frontend`, `postgres`, `kafka`, `kafka-ui`, `elasticsearch`, `kibana`, `zookeeper`).
 
 ### Opción A.2 — Docker Compose manual (sin el script)
 
