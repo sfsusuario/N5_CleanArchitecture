@@ -1,14 +1,9 @@
-using Dapper;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Security.Domain.Entities;
 using Security.Domain.Repositories.Query;
 using Security.Infrastructure.Data;
 using Security.Infrastructure.Repository.Query.Base;
-using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace Security.Infrastructure.Repository.Query
@@ -21,10 +16,9 @@ namespace Security.Infrastructure.Repository.Query
         /// <summary>
         /// Permissions query repository constructor
         /// </summary>
-        /// <param name="configuration">Configuration</param>
         /// <param name="context">Security context instance</param>
-        public PermissionsQueryRepository(IConfiguration configuration, SecurityContext context) 
-            : base(configuration, context)
+        public PermissionsQueryRepository(SecurityContext context)
+            : base(context)
         {
 
         }
@@ -34,42 +28,22 @@ namespace Security.Infrastructure.Repository.Query
         /// </summary>
         public async Task<IReadOnlyList<Permissions>> GetPermissionsAsync()
         {
-            var me = this;
-            try
-            {
-                return await Task.Factory.StartNew<IReadOnlyList<Permissions>>(() => {
-                    return me._context
-                        .Permissions
-                        .Include(u=>u.PermissionTypeRef)
-                        .ToList();
-                });
-            }
-            catch (Exception exp)
-            {
-                throw new Exception(exp.Message, exp);
-            }
+            // Real async I/O via EF Core; exceptions propagate as-is so callers see the
+            // original EF exception instead of a re-wrapped, less informative one.
+            return await _context.Permissions
+                .Include(u => u.PermissionTypeRef)
+                .ToListAsync();
         }
-        
+
         /// <summary>
         /// Get permission by id
         /// </summary>
         /// <param name="id">Permission identifier</param>
-        public async Task<Permissions> GetPermissionAsync(long id)
+        public async Task<Permissions> GetPermissionAsync(int id)
         {
-            var me = this;
-            try
-            {
-                return await Task.Factory.StartNew<Permissions>(() => {
-                    return me._context
-                        .Permissions
-                        .Include(u => u.PermissionTypeRef)
-                        .FirstOrDefault( e => e.Id == id);
-                });
-            }
-            catch (Exception exp)
-            {
-                throw new Exception(exp.Message, exp);
-            }
+            return await _context.Permissions
+                .Include(u => u.PermissionTypeRef)
+                .FirstOrDefaultAsync(e => e.Id == id);
         }
     }
 }

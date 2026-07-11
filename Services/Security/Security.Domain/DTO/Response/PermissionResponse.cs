@@ -8,7 +8,7 @@ namespace Security.Domain.DTO.Response
         /// <summary>
         /// Employee identifier
         /// </summary>
-        public long Id { get; set; }
+        public int Id { get; set; }
 
         /// <summary>
         /// Employee forename

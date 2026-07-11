@@ -7,6 +7,7 @@ using Security.Domain.Entities;
 using Security.Domain.External.Command;
 using Security.Domain.Repositories.Query;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -46,7 +47,10 @@ namespace Security.Application.Handlers.QueryHandlers
                 Id = Guid.NewGuid(),
                 NameOperation = KafkaPermissionActions.GET
             });
-            return (List<Permissions>)await _repo.GetPermissionsAsync();
+            // ToList() instead of a cast: GetPermissionsAsync returns IReadOnlyList<Permissions>,
+            // and casting it directly only works while the concrete implementation happens
+            // to return a List<T> under the hood.
+            return (await _repo.GetPermissionsAsync()).ToList();
         }
     }
 }

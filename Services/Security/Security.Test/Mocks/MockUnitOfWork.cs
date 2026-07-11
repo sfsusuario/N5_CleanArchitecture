@@ -18,9 +18,15 @@ namespace Security.Test.Mocks
             var mockUow = new Mock<IUnitOfWork>();
             var mockPermissionsQuery = MockPermissionsRepository.PermissionsQueryRepository();
             var mockPermissionsCommand = MockPermissionsRepository.PermissionsCommandRepository();
+            var mockOutbox = MockOutboxRepository.GetOutboxRepository();
 
             mockUow.Setup(r => r.PermissionsQueryRepository).Returns(mockPermissionsQuery.Object);
             mockUow.Setup(r => r.PermissionsCommandRepository).Returns(mockPermissionsCommand.Object);
+            mockUow.Setup(r => r.OutboxMessages).Returns(mockOutbox.Object);
+            mockUow.Setup(r => r.Save()).Returns(Task.CompletedTask);
+            mockUow.Setup(r => r.BeginTransactionAsync()).Returns(Task.CompletedTask);
+            mockUow.Setup(r => r.CommitTransactionAsync()).Returns(Task.CompletedTask);
+            mockUow.Setup(r => r.RollbackTransactionAsync()).Returns(Task.CompletedTask);
 
             return mockUow;
         }

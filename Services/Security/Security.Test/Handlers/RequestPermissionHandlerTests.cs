@@ -1,24 +1,21 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Moq;
+using Security.Domain.Constants;
 using Security.Domain.Contracts.Persistence;
 using Security.Application.Handlers.CommandHandler;
-using Security.Application.Handlers.QueryHandlers;
 using Security.Application.Mapper;
-using Security.Domain.CQRS.Repository.Queries;
+using Security.Domain.CQRS.External.Commands;
 using Security.Domain.Entities;
-using Security.Domain.Repositories.Query;
+using Security.Domain.Repositories.Command;
 using Security.Test.Mocks;
 using Shouldly;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Security.Domain.CQRS.Repository.Commands;
 using Security.Domain.DTO.Response;
-using Security.Domain.External.Command;
 
 namespace Security.Test.Handlers
 {
@@ -28,14 +25,10 @@ namespace Security.Test.Handlers
         private readonly Mock<IUnitOfWork> _mockUow;
         private readonly Permissions _leaveTypeDto;
         private readonly RequestPermissionHandler _handler;
-        private readonly Mock<IKafkaCommandExternal> _mockKafka;
-        private readonly Mock<IElasticSearchCommandExternal> _mockElasticsearch;
 
         public RequestPermissionHandlerTests()
         {
             _mockUow = MockUnitOfWork.GetUnitOfWork();
-            _mockKafka = MockKafka.GetKafka();
-            _mockElasticsearch = MockElasticSearch.GetElasticSearch();
 
             var mapperConfig = new MapperConfiguration(c =>
             {
@@ -43,7 +36,7 @@ namespace Security.Test.Handlers
             });
 
             _mapper = mapperConfig.CreateMapper();
-            _handler = new RequestPermissionHandler(_mockUow.Object, _mockKafka.Object, _mockElasticsearch.Object);
+            _handler = new RequestPermissionHandler(_mockUow.Object);
 
             _leaveTypeDto = new Permissions
             {
@@ -59,6 +52,40 @@ namespace Security.Test.Handlers
             var result = await _handler.Handle(new RequestPermissionCommand(), CancellationToken.None);
 
             result.ShouldBeOfType<PermissionResponse>();
+        }
+
+        [Fact]
+        public async Task RequestPermission_WritesKafkaAndElasticsearchOutboxRowsAndCommits()
+        {
+            await _handler.Handle(new RequestPermissionCommand(), CancellationToken.None);
+
+            _mockUow.Verify(u => u.BeginTransactionAsync(), Times.Once);
+            _mockUow.Verify(u => u.OutboxMessages.RequestAsync(
+                It.Is<OutboxMessage>(m => m.Channel == OutboxChannels.Kafka
+                    && JsonSerializer.Deserialize<RequestKafkaCommand>(m.Payload, (JsonSerializerOptions)null).NameOperation == KafkaPermissionActions.REQUEST)),
+                Times.Once);
+            _mockUow.Verify(u => u.OutboxMessages.RequestAsync(
+                It.Is<OutboxMessage>(m => m.Channel == OutboxChannels.Elasticsearch)),
+                Times.Once);
+            _mockUow.Verify(u => u.CommitTransactionAsync(), Times.Once);
+            _mockUow.Verify(u => u.RollbackTransactionAsync(), Times.Never);
+        }
+
+        [Fact]
+        public async Task RequestPermission_WrapsRepositoryExceptionInApplicationExceptionAndRollsBack()
+        {
+            var mockCommandRepo = MockPermissionsRepository.PermissionsCommandRepository();
+            mockCommandRepo.Setup(r => r.RequestAsync(It.IsAny<Permissions>()))
+                .ThrowsAsync(new InvalidOperationException("db unavailable"));
+            _mockUow.Setup(r => r.PermissionsCommandRepository).Returns(mockCommandRepo.Object);
+
+            var handler = new RequestPermissionHandler(_mockUow.Object);
+
+            await Should.ThrowAsync<ApplicationException>(
+                () => handler.Handle(new RequestPermissionCommand(), CancellationToken.None));
+
+            _mockUow.Verify(u => u.RollbackTransactionAsync(), Times.Once);
+            _mockUow.Verify(u => u.CommitTransactionAsync(), Times.Never);
         }
     }
 }

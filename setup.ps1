@@ -1,0 +1,169 @@
+<#
+.SYNOPSIS
+    Instalacion e inicializacion de un solo paso para N5_CleanArchitecture.
+
+.DESCRIPTION
+    - Verifica que Docker Desktop y el .NET SDK esten disponibles (instala la herramienta
+      dotnet-ef si falta).
+    - Construye y levanta todo el stack con Docker Compose: zookeeper, kafka, sqlserver,
+      elasticsearch, el backend (producer) y el frontend.
+    - Espera a que SQL Server acepte conexiones y aplica las migraciones de EF Core contra
+      el contenedor (sin tocar tu SQL Server local, si tuvieras uno).
+    - Verifica que la API responda y abre el frontend en el navegador.
+
+.PARAMETER SkipBrowser
+    No abrir el navegador automaticamente al finalizar.
+
+.EXAMPLE
+    .\setup.ps1
+#>
+
+[CmdletBinding()]
+param(
+    [switch]$SkipBrowser
+)
+
+$ErrorActionPreference = 'Stop'
+
+$RepoRoot = $PSScriptRoot
+Set-Location $RepoRoot
+
+$SqlSaPassword = 'PasswordO1.'
+$SqlConnectionString = "Server=localhost,1433;Database=SecurityDb;User Id=sa;Password=$SqlSaPassword;TrustServerCertificate=True"
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host ""
+    Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Test-CommandExists {
+    param([string]$Name)
+    return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+# 1. Prerequisitos ------------------------------------------------------------
+Write-Step "Verificando prerequisitos"
+
+if (-not (Test-CommandExists 'docker')) {
+    Write-Host "Docker no esta instalado o no esta en el PATH. Instala Docker Desktop: https://www.docker.com/products/docker-desktop" -ForegroundColor Red
+    exit 1
+}
+
+docker info *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Docker Desktop no parece estar corriendo. Abrelo y vuelve a ejecutar este script." -ForegroundColor Red
+    exit 1
+}
+
+if (-not (Test-CommandExists 'dotnet')) {
+    Write-Host "El .NET SDK no esta instalado. Instalalo desde https://dotnet.microsoft.com/download (se necesita para aplicar las migraciones de EF Core desde este script)." -ForegroundColor Red
+    exit 1
+}
+
+$efInstalled = dotnet tool list --global | Select-String 'dotnet-ef'
+if (-not $efInstalled) {
+    Write-Step "Instalando la herramienta global dotnet-ef"
+    dotnet tool install --global dotnet-ef | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "No se pudo instalar dotnet-ef. Instalala manualmente con 'dotnet tool install --global dotnet-ef'." -ForegroundColor Red
+        exit 1
+    }
+}
+
+Write-Host "Prerequisitos OK." -ForegroundColor Green
+
+# 2. Build + levantar el stack completo ---------------------------------------
+Write-Step "Construyendo las imagenes (backend + frontend)"
+docker compose build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Fallo el build de las imagenes. Revisa el mensaje de arriba." -ForegroundColor Red
+    exit 1
+}
+
+Write-Step "Levantando el stack (zookeeper, kafka, sqlserver, elasticsearch, backend, frontend)"
+docker compose up -d
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Fallo 'docker compose up'. Revisa el mensaje de arriba." -ForegroundColor Red
+    exit 1
+}
+
+# 3. Esperar a que SQL Server acepte conexiones -------------------------------
+Write-Step "Esperando a que SQL Server este listo"
+
+$maxAttempts = 30
+$attempt = 0
+$sqlReady = $false
+
+while ($attempt -lt $maxAttempts -and -not $sqlReady) {
+    $attempt++
+    docker compose exec -T sqlserver /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $SqlSaPassword -Q "SELECT 1" *> $null
+    if ($LASTEXITCODE -eq 0) {
+        $sqlReady = $true
+    }
+    else {
+        Write-Host "  SQL Server todavia no responde (intento $attempt/$maxAttempts)..."
+        Start-Sleep -Seconds 3
+    }
+}
+
+if (-not $sqlReady) {
+    Write-Host "SQL Server no respondio a tiempo. Revisa 'docker compose logs sqlserver' y vuelve a intentar." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "SQL Server listo." -ForegroundColor Green
+
+# 4. Migraciones de EF Core ----------------------------------------------------
+Write-Step "Aplicando migraciones de EF Core contra el SQL Server del contenedor"
+
+dotnet ef database update `
+    --project Services/Security/Security.Infrastructure `
+    --startup-project Services/Security/Security.Presentation `
+    --connection $SqlConnectionString
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Las migraciones fallaron. Revisa el mensaje de error de arriba." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Migraciones aplicadas." -ForegroundColor Green
+
+# 5. Smoke test del backend ----------------------------------------------------
+Write-Step "Verificando que la API responde"
+
+$maxApiAttempts = 20
+$apiReady = $false
+for ($i = 0; $i -lt $maxApiAttempts -and -not $apiReady; $i++) {
+    try {
+        $response = Invoke-WebRequest -Uri 'http://localhost:5000/api/Permissions/Test' -UseBasicParsing -TimeoutSec 3
+        if ($response.StatusCode -eq 200) {
+            $apiReady = $true
+        }
+    }
+    catch {
+        Start-Sleep -Seconds 3
+    }
+}
+
+if ($apiReady) {
+    Write-Host "API respondiendo en http://localhost:5000" -ForegroundColor Green
+}
+else {
+    Write-Host "La API todavia no respondio a tiempo; puede seguir iniciando. Revisa 'docker compose logs producer'." -ForegroundColor Yellow
+}
+
+# 6. Abrir el navegador ---------------------------------------------------------
+if (-not $SkipBrowser) {
+    Write-Step "Abriendo la interfaz web"
+    Start-Process 'http://localhost:3000'
+}
+
+Write-Host ""
+Write-Host "Listo. Servicios disponibles:" -ForegroundColor Cyan
+Write-Host "  Frontend:  http://localhost:3000"
+Write-Host "  API:       http://localhost:5000/api/Permissions/Test"
+Write-Host "  ElasticSearch: http://localhost:9200"
+Write-Host ""
+Write-Host "Para ver logs:   docker compose logs -f [servicio]"
+Write-Host "Para detener:    docker compose down"

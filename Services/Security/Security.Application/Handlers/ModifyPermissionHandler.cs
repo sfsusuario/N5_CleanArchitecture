@@ -5,13 +5,10 @@ using Security.Application.Mapper;
 using Security.Domain.Entities;
 using Security.Domain.Repositories.Command;
 using Security.Domain.Repositories.Query;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Security.Domain.CQRS.Repository.Commands;
-using Security.Domain.External.Command;
 using Security.Domain.Constants;
 using Security.Domain.CQRS.External.Commands;
+using System.Text.Json;
 
 namespace Security.Application.Handlers.CommandHandler
 {
@@ -23,26 +20,16 @@ namespace Security.Application.Handlers.CommandHandler
         private readonly IPermissionsQueryRepository _repoQuery;
         private readonly IPermissionsCommandRepository _repoCommand;
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IKafkaCommandExternal _kafka;
-        private readonly IElasticSearchCommandExternal _elasticSearch;
 
         /// <summary>
         /// ModifyPermissionHandler constructor
         /// </summary>
         /// <param name="unitOfWork">UnitOfWork instance</param>
-        /// <param name="kafka">Kafka instance</param>
-        /// <param name="elasticSearch">ElasticSearch instance</param>
-        public ModifyPermissionHandler(
-            IUnitOfWork unitOfWork, 
-            IKafkaCommandExternal kafka,
-            IElasticSearchCommandExternal elasticSearch
-        )
+        public ModifyPermissionHandler(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
             _repoQuery = _unitOfWork.PermissionsQueryRepository;
             _repoCommand = _unitOfWork.PermissionsCommandRepository;
-            _kafka = kafka;
-            _elasticSearch = elasticSearch;
         }
 
         /// <summary>
@@ -60,26 +47,44 @@ namespace Security.Application.Handlers.CommandHandler
                 throw new ApplicationException("There is a problem in mapper");
             }
 
+            await _unitOfWork.BeginTransactionAsync();
             try
             {
                 await _repoCommand.UpdateAsync(permissionsEntity);
-                await _kafka.RequestAsync(new RequestKafkaCommand()
+
+                // Unlike RequestPermissionHandler, the Id is already known (it comes from the
+                // command), so the Permissions update and both outbox rows can commit in a
+                // single Save() call — still wrapped in a transaction for symmetry/safety.
+                await _unitOfWork.OutboxMessages.RequestAsync(new OutboxMessage
                 {
-                    Id = Guid.NewGuid(),
-                    NameOperation = KafkaPermissionActions.MODIFY
+                    Channel = OutboxChannels.Kafka,
+                    CreatedAt = DateTime.UtcNow,
+                    Payload = JsonSerializer.Serialize(new RequestKafkaCommand
+                    {
+                        Id = Guid.NewGuid(),
+                        NameOperation = KafkaPermissionActions.MODIFY
+                    })
+                });
+                await _unitOfWork.OutboxMessages.RequestAsync(new OutboxMessage
+                {
+                    Channel = OutboxChannels.Elasticsearch,
+                    CreatedAt = DateTime.UtcNow,
+                    Payload = JsonSerializer.Serialize(new RequestElasticSearchCommand
+                    {
+                        Id = permissionsEntity.Id,
+                        EmployeeForename = permissionsEntity.EmployeeForename,
+                        EmployeeSurname = permissionsEntity.EmployeeSurname,
+                        PermissionDate = permissionsEntity.PermissionDate,
+                        PermissionType = permissionsEntity.PermissionType
+                    })
                 });
 
-                await _elasticSearch.RequestAsync(new RequestElasticSearchCommand()
-                {
-                    Id = permissionsEntity.Id,
-                    EmployeeForename = permissionsEntity.EmployeeForename,
-                    EmployeeSurname = permissionsEntity.EmployeeSurname,
-                    PermissionDate = permissionsEntity.PermissionDate,
-                    PermissionType = permissionsEntity.PermissionType
-                });
+                await _unitOfWork.Save();
+                await _unitOfWork.CommitTransactionAsync();
             }
             catch (Exception exp)
             {
+                await _unitOfWork.RollbackTransactionAsync();
                 throw new ApplicationException(exp.Message);
             }
 

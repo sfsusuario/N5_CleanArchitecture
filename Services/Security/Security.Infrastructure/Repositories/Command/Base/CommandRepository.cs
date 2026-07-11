@@ -21,6 +21,10 @@ namespace Security.Infrastructure.Repository.Command.Base
             _context = context;
         }
 
+        // These methods only stage changes on the tracked DbContext; they deliberately do NOT
+        // call SaveChangesAsync. Persisting is IUnitOfWork.Save()'s job, so a handler that needs
+        // to touch more than one repository can still commit everything in one transaction.
+
         /// <summary>
         /// Request async
         /// </summary>
@@ -29,7 +33,6 @@ namespace Security.Infrastructure.Repository.Command.Base
         public async Task<T> RequestAsync(T entity)
         {
             await _context.Set<T>().AddAsync(entity);
-            await _context.SaveChangesAsync();
             return entity;
         }
 
@@ -38,10 +41,10 @@ namespace Security.Infrastructure.Repository.Command.Base
         /// </summary>
         /// <param name="entity">Entity object</param>
         /// <returns>Task</returns>
-        public async Task UpdateAsync(T entity)
+        public Task UpdateAsync(T entity)
         {
             _context.Entry(entity).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -49,10 +52,10 @@ namespace Security.Infrastructure.Repository.Command.Base
         /// </summary>
         /// <param name="entity">Entity object</param>
         /// <returns>Task</returns>
-        public async Task DeleteAsync(T entity)
+        public Task DeleteAsync(T entity)
         {
             _context.Set<T>().Remove(entity);
-            await _context.SaveChangesAsync();
+            return Task.CompletedTask;
         }
     }
 }

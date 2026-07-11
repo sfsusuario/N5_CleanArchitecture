@@ -11,7 +11,7 @@ services:
     ports:
       - "9092:9092"
       - "9094:9094"
-    links: 
+    links:
      - zookeeper
     environment:
       KAFKA_ADVERTISED_HOST_NAME: kafka
@@ -33,7 +33,7 @@ services:
     container_name: sqlserver
     ports:
       - 1433:1433
-    links: 
+    links:
      - kafka
     environment:
       ACCEPT_EULA: Y
@@ -41,13 +41,42 @@ services:
       MSSQL_PID: Express
     volumes:
       - ~/docker/sqlserver-data:/var/opt/mssql
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.5
+    hostname: elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
   producer:
     build:
+      context: ./Services/Security
       dockerfile: Dockerfile
     image: security_dotnet:latest
     ports:
       - "5000:80"
-    links: 
+    links:
      - kafka
+     - sqlserver
+     - elasticsearch
     environment:
       ASPNETCORE_ENVIRONMENT: docker
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=SecurityDb;User Id=sa;Password=PasswordO1.;TrustServerCertificate=True"
+      ProjectConfiguration__KafkaConnection: "kafka:9092"
+      ProjectConfiguration__KafkaTopic: "mytopic"
+      ProjectConfiguration__ElasticSearchConnection: "http://elasticsearch:9200"
+  frontend:
+    build:
+      context: ./Services/Security/Security.Frontend
+      dockerfile: Dockerfile
+      args:
+        # Runs in the browser on the host, not inside the Docker network, so it must use the
+        # host-mapped port of `producer` (localhost:5000), not the internal hostname.
+        VITE_API_BASE_URL: "http://localhost:5000"
+    image: security_frontend:latest
+    ports:
+      - "3000:80"
+    links:
+     - producer

@@ -62,10 +62,19 @@ namespace Security.Presentation.Controllers
         /// <returns>ActionResult</returns>
         [HttpGet("GetPermissions")]
         [ProducesResponseType(StatusCodes.Status200OK)]
-        public async Task<List<Permissions>> GetPermissions()
+        public async Task<ActionResult<List<Permissions>>> GetPermissions()
         {
-            this._logger.LogInformation("GetPermissions success");
-            return await _mediator.Send(new GetPermissionsQuery());
+            try
+            {
+                var result = await _mediator.Send(new GetPermissionsQuery());
+                this._logger.LogInformation("GetPermissions success");
+                return Ok(result);
+            }
+            catch (Exception exp)
+            {
+                this._logger.LogError("GetPermissions error: " + exp.Message);
+                return BadRequest(exp.Message);
+            }
         }
 
         /// <summary>
@@ -78,7 +87,7 @@ namespace Security.Presentation.Controllers
         {
             try
             {
-                if (command.Id == id)
+                if (command != null && command.Id == id)
                 {
                     var result = await _mediator.Send(command);
                     this._logger.LogInformation("ModifyPermission success - Employee #" + result.Id);

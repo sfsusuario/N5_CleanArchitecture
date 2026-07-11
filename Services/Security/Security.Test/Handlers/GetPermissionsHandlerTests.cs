@@ -1,9 +1,11 @@
 ﻿using AutoMapper;
 using Moq;
+using Security.Domain.Constants;
 using Security.Domain.Contracts.Persistence;
 using Security.Application.Handlers.CommandHandler;
 using Security.Application.Handlers.QueryHandlers;
 using Security.Application.Mapper;
+using Security.Domain.CQRS.External.Commands;
 using Security.Domain.CQRS.Repository.Queries;
 using Security.Domain.Entities;
 using Security.Domain.Repositories.Query;
@@ -49,6 +51,31 @@ namespace Security.Test.Handlers
             result.ShouldBeOfType<List<Permissions>>();
 
             result.Count.ShouldBe(3);
+        }
+
+        [Fact]
+        public async Task GetPermissions_PublishesGetEventToKafka()
+        {
+            var handler = new GetPermissionsHandler(_mockUow.Object, _mockKafka.Object);
+
+            await handler.Handle(new GetPermissionsQuery(), CancellationToken.None);
+
+            _mockKafka.Verify(k => k.RequestAsync(
+                It.Is<RequestKafkaCommand>(c => c.NameOperation == KafkaPermissionActions.GET)),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task GetPermissions_PropagatesRepositoryException()
+        {
+            var mockRepo = MockPermissionsRepository.PermissionsQueryRepository();
+            mockRepo.Setup(r => r.GetPermissionsAsync()).ThrowsAsync(new InvalidOperationException("db unavailable"));
+            _mockUow.Setup(r => r.PermissionsQueryRepository).Returns(mockRepo.Object);
+
+            var handler = new GetPermissionsHandler(_mockUow.Object, _mockKafka.Object);
+
+            await Should.ThrowAsync<InvalidOperationException>(
+                () => handler.Handle(new GetPermissionsQuery(), CancellationToken.None));
         }
     }
 }

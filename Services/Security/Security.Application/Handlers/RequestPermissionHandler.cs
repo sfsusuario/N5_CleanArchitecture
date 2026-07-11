@@ -7,9 +7,9 @@ using Security.Domain.Repositories.Query;
 using Security.Domain.Contracts.Persistence;
 using Security.Domain.DTO.Response;
 using Security.Domain.CQRS.Repository.Commands;
-using Security.Domain.External.Command;
 using Security.Domain.Constants;
 using Security.Domain.CQRS.External.Commands;
+using System.Text.Json;
 
 namespace Security.Application.Handlers.CommandHandler
 {
@@ -21,26 +21,16 @@ namespace Security.Application.Handlers.CommandHandler
         private readonly IPermissionsQueryRepository _repoQuery;
         private readonly IPermissionsCommandRepository _repoCommand;
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IKafkaCommandExternal _kafka;
-        private readonly IElasticSearchCommandExternal _elasticSearch;
 
         /// <summary>
         /// RequestPermissionHandler constructor
         /// </summary>
         /// <param name="unitOfWork">UnitOfWork instance</param>
-        /// <param name="kafka">Kafka instance</param>
-        /// <param name="elasticSearch">ElasticSearch instance</param>
-        public RequestPermissionHandler(
-            IUnitOfWork unitOfWork, 
-            IKafkaCommandExternal kafka,
-            IElasticSearchCommandExternal elasticSearch
-         )
+        public RequestPermissionHandler(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
             _repoQuery = _unitOfWork.PermissionsQueryRepository;
             _repoCommand = _unitOfWork.PermissionsCommandRepository;
-            _kafka = kafka;
-            _elasticSearch = elasticSearch;
         }
 
         /// <summary>
@@ -59,25 +49,50 @@ namespace Security.Application.Handlers.CommandHandler
                 throw new ApplicationException("There is a problem in mapper");
             }
 
+            await _unitOfWork.BeginTransactionAsync();
             try
             {
                 createdPermission = await _repoCommand.RequestAsync(permissionsEntity);
-                await _kafka.RequestAsync(new RequestKafkaCommand()
+                // Flush now (not just at the end): createdPermission.Id is SQL Server-generated
+                // and only known after this Save() — the Elasticsearch outbox payload needs it.
+                // Both this write and the outbox rows below still commit atomically together,
+                // because everything happens inside the transaction started above.
+                await _unitOfWork.Save();
+
+                await _unitOfWork.OutboxMessages.RequestAsync(new OutboxMessage
                 {
-                    Id = Guid.NewGuid(),
-                    NameOperation = KafkaPermissionActions.REQUEST
+                    Channel = OutboxChannels.Kafka,
+                    CreatedAt = DateTime.UtcNow,
+                    Payload = JsonSerializer.Serialize(new RequestKafkaCommand
+                    {
+                        Id = Guid.NewGuid(),
+                        NameOperation = KafkaPermissionActions.REQUEST
+                    })
                 });
-                await _elasticSearch.RequestAsync(new RequestElasticSearchCommand()
+                await _unitOfWork.OutboxMessages.RequestAsync(new OutboxMessage
                 {
-                    Id = createdPermission.Id,
-                    EmployeeForename = createdPermission.EmployeeForename,
-                    EmployeeSurname = createdPermission.EmployeeSurname,
-                    PermissionDate = createdPermission.PermissionDate,
-                    PermissionType = createdPermission.PermissionType
+                    Channel = OutboxChannels.Elasticsearch,
+                    CreatedAt = DateTime.UtcNow,
+                    Payload = JsonSerializer.Serialize(new RequestElasticSearchCommand
+                    {
+                        Id = createdPermission.Id,
+                        EmployeeForename = createdPermission.EmployeeForename,
+                        EmployeeSurname = createdPermission.EmployeeSurname,
+                        PermissionDate = createdPermission.PermissionDate,
+                        PermissionType = createdPermission.PermissionType
+                    })
                 });
+                await _unitOfWork.Save();
+
+                await _unitOfWork.CommitTransactionAsync();
             }
             catch (Exception exp)
             {
+                // Rolls back the Permissions insert too: with the Outbox pattern, either the
+                // business change AND its notifications land together, or neither does.
+                // Kafka/Elasticsearch themselves are never called from this request path
+                // anymore — see OutboxDispatcherService — so this only ever catches DB errors.
+                await _unitOfWork.RollbackTransactionAsync();
                 throw new ApplicationException(exp.Message);
             }
 

@@ -1,0 +1,219 @@
+# Security Service — Documentación técnica
+
+Este documento describe la arquitectura, los patrones de diseño y el proceso de despliegue del microservicio **Security**, que gestiona solicitudes de permisos de empleados (alta, consulta y modificación).
+
+## 1. Arquitectura
+
+### Capas del proyecto
+
+El servicio sigue **Clean Architecture** (también llamada Onion Architecture): las dependencias siempre apuntan hacia adentro, hacia el Dominio, que no depende de ninguna otra capa.
+
+```
+Services/Security/
+├── Security.Domain          Entidades, contratos (interfaces), comandos/queries CQRS. No depende de nada más.
+├── Security.Application     Casos de uso: handlers de MediatR, mapeo con AutoMapper, validación con FluentValidation.
+├── Security.Infrastructure  Implementaciones concretas: EF Core (SQL Server), Kafka, Elasticsearch.
+├── Security.Presentation    API REST (ASP.NET Core): controllers, Program.cs (composition root), Swagger.
+├── Security.Test            Tests unitarios (xUnit + Moq + Shouldly) y de repositorio (EF Core InMemory).
+└── Security.Frontend        SPA React + TypeScript que consume la API (ver sección 1.1).
+```
+
+### 1.1 Frontend (`Security.Frontend`)
+
+Proyecto React independiente (no forma parte de la solución .NET) que consume la API REST del backend:
+
+- **React 18 + TypeScript**, empaquetado con **Vite**.
+- **Redux Toolkit + redux-saga**: el estado de `permissions` vive en un slice de RTK (`src/store/permissions/permissionsSlice.ts`); toda la lógica asíncrona (llamadas HTTP) vive en sagas (`permissionsSaga.ts`) que escuchan acciones `*Requested`, llaman a la API con `call()` y despachan `*Succeeded`/`*Failed` con `put()` — el store se configura sin `redux-thunk` (`thunk: false`) para que el saga sea el único mecanismo de efectos secundarios.
+- **react-bootstrap + Bootstrap 5** para los componentes de UI (Navbar, Table, Form, Card).
+- **axios** como cliente HTTP, con la URL base de la API tomada de `VITE_API_BASE_URL` (variable de build de Vite).
+
+Estructura relevante:
+
+```
+Security.Frontend/src/
+├── api/permissionsApi.ts              Cliente HTTP (axios) hacia /api/Permissions/*
+├── types/permission.ts                Interfaces TS que reflejan los DTOs del backend
+├── store/
+│   ├── store.ts                       configureStore + sagaMiddleware
+│   ├── rootSaga.ts
+│   └── permissions/
+│       ├── permissionsSlice.ts        Estado + acciones (RTK)
+│       └── permissionsSaga.ts         Efectos: fetch/request/modify permission
+└── components/                        Layout, PermissionsList, PermissionForm
+```
+
+Funcionalidad: lista de permisos (`GetPermissions`), alta (`RequestPermission`) y edición (`ModifyPermission`) desde un único formulario, con recarga automática de la lista tras cada operación exitosa (la saga despacha `fetchPermissionsRequested` al finalizar).
+
+Referencias de proyecto (siempre hacia adentro):
+
+```
+Presentation → Application, Domain, Infrastructure
+Infrastructure → Domain, Application
+Application → Domain
+Domain → (nada)
+```
+
+### Flujo de una request — ejemplo `POST /api/Permissions/RequestPermission`
+
+```
+Cliente HTTP
+   │
+   ▼
+PermissionsController.RequestPermission()          (Presentation)
+   │  _mediator.Send(command)
+   ▼
+RequestPermissionHandler.Handle()                   (Application)
+   │  1. Mapea RequestPermissionCommand → Permissions (AutoMapper)
+   │  2. BeginTransactionAsync()
+   │  3. _repoCommand.RequestAsync(entity) + Save()    (persiste en SQL Server ← fuente de verdad,
+   │                                                     y genera el Id autoincremental)
+   │  4. OutboxMessages.RequestAsync(...) x2 + Save()  (escribe 2 filas: canal Kafka y canal
+   │                                                     Elasticsearch, con el Id ya conocido)
+   │  5. CommitTransactionAsync()                      (todo lo anterior se confirma junto)
+   │  6. Mapea Permissions → PermissionResponse
+   ▼
+Respuesta 200 OK con PermissionResponse       (Kafka/Elasticsearch NO se llamaron todavía)
+
+OutboxDispatcherService (background, cada 5s)
+   │  Lee OutboxMessages con ProcessedAt == null
+   │  Por cada fila: deserializa el payload y llama a Kafka/Elasticsearch (con retry + circuit
+   │  breaker vía Polly). Si tiene éxito, marca ProcessedAt; si falla, incrementa RetryCount y
+   │  la deja pendiente para el próximo ciclo.
+   ▼
+Kafka topic "mytopic" / índice Elasticsearch "permissions" actualizados
+```
+
+`ModifyPermission` sigue el mismo esquema (transacción + outbox). `GetPermissions` es la excepción: al ser una lectura sin cambio de estado que persistir, sigue llamando a Kafka directamente (con la misma resiliencia de Polly, pero sin pasar por el outbox — no hay nada que la escritura del outbox necesitaría hacer atómico con una simple consulta).
+
+### Servicios externos
+
+| Servicio | Uso | Cliente |
+|---|---|---|
+| SQL Server | Persistencia de `Permissions`, `PermissionTypes` y `OutboxMessages` | EF Core 6 (`SecurityContext`) |
+| Kafka | Evento de auditoría por cada operación (REQUEST/MODIFY/GET) | Confluent.Kafka, vía `OutboxDispatcherService` (REQUEST/MODIFY) o directo (GET) |
+| Elasticsearch | Índice de búsqueda de permisos (`permissions`) | NEST, vía `OutboxDispatcherService` |
+
+SQL Server es la única fuente de verdad transaccional. Gracias al patrón Outbox, un `RequestPermission`/`ModifyPermission` exitoso ya no depende de que Kafka o Elasticsearch estén disponibles en ese instante — sus notificaciones quedan garantizadas por el `OutboxDispatcherService`, que reintenta indefinidamente hasta lograr entregarlas.
+
+## 2. Patrones de diseño y ubicación en el código
+
+| Patrón | Dónde | Notas |
+|---|---|---|
+| Clean / Onion Architecture | Estructura de proyectos (`Security.Domain/Application/Infrastructure/Presentation`) | Las dependencias de `.csproj` reflejan la regla de dependencia hacia adentro |
+| CQRS + Mediator | `Security.Domain/CQRS/*` (comandos/queries), `Security.Application/Handlers/*` (handlers) | MediatR enruta cada `IRequest` a su `IRequestHandler` |
+| Repository | `Security.Domain/Repositories/*` (contratos), `Security.Infrastructure/Repositories/*` (implementación EF Core) | Separa el acceso a datos de la lógica de negocio |
+| Unit of Work | `Security.Infrastructure/Repositories/UnitOfWork.cs` | Agrupa los repositorios de un mismo `SecurityContext`; `Save()` es el único punto que llama `SaveChangesAsync()`, dando atomicidad real cuando un handler toca más de un repositorio |
+| AutoMapper (Object Mapper) | `Security.Application/Mapper/*` | `SecurityMappingProfile` define los mapeos; `PermissionsMapper` expone un `IMapper` singleton perezoso |
+| Dependency Injection | `Security.Presentation/Program.cs` | Composition root: registra `DbContext`, MediatR, repositorios, Kafka/Elasticsearch, FluentValidation, el `OutboxDispatcherService` |
+| Pipeline Behaviour (validación) | `Security.Application/Behaviours/ValidationBehaviour.cs` + `Security.Application/Validators/*` | Se ejecuta antes de cada handler de MediatR; si un `FluentValidation.IValidator` falla, lanza `ValidationException` sin que el handler llegue a ejecutarse |
+| **Outbox** | Entidad: `Security.Domain/Entities/OutboxMessage.cs`. Escritura: `RequestPermissionHandler`/`ModifyPermissionHandler` (vía `IUnitOfWork.OutboxMessages`). Lectura/despacho: `Security.Infrastructure/BackgroundServices/OutboxDispatcherService.cs` | La fila de outbox se persiste en la misma transacción que el cambio de negocio (`BeginTransactionAsync`/`CommitTransactionAsync` en `UnitOfWork`); un `BackgroundService` la entrega después, de forma asíncrona. Así una caída de Kafka/Elasticsearch nunca hace fallar la request ni pierde el evento |
+| **Circuit Breaker + Retry** | `Security.Infrastructure/Resilience/ResiliencePolicyFactory.cs`, usado por `KafkaCommandExternal` y `ElasticSearchCommandExternal` | Con Polly: 3 reintentos con backoff exponencial (200ms, 400ms, 800ms) y luego un circuit breaker que abre tras 5 fallos consecutivos por 30s. El retry envuelve al circuit breaker, así que una vez abierto el circuito, los reintentos fallan rápido (`BrokenCircuitException`) en vez de seguir golpeando una dependencia caída |
+| **Flux/Redux (frontend)** | `Security.Frontend/src/store/*` | Estado unidireccional: componente despacha acción → reducer (RTK slice) actualiza estado síncrono → saga observa la acción y ejecuta el efecto async → despacha una nueva acción con el resultado |
+| **Saga (frontend)** | `Security.Frontend/src/store/permissions/permissionsSaga.ts` | `redux-saga`: generadores que orquestan llamadas HTTP asíncronas (`call`) y despacho de acciones (`put`) de forma testeable y declarativa, en vez de lógica async dispersa en los componentes |
+
+## 3. Despliegue
+
+### Opción A — `setup.ps1` (recomendado: todo automatizado)
+
+El `docker-compose.yaml` que centraliza la ejecución de toda la aplicación (frontend, backend y sus 4 dependencias — SQL Server, Kafka, Elasticsearch, Zookeeper, cada una en su propio contenedor) vive en la **raíz del repositorio**. `setup.ps1` (también en la raíz) automatiza todo el flujo sobre ese archivo:
+
+```powershell
+.\setup.ps1
+```
+
+Paso a paso, el script:
+
+1. Verifica que Docker Desktop esté corriendo y que el .NET SDK esté instalado (instala la herramienta `dotnet-ef` si falta).
+2. `docker compose build` + `docker compose up -d` — construye y levanta los 6 contenedores.
+3. Espera (con reintentos) a que SQL Server acepte conexiones dentro del contenedor.
+4. Aplica las migraciones de EF Core contra ese SQL Server (`dotnet ef database update --connection "Server=localhost,1433;..."`, sin tocar ningún SQL Server local que tengas instalado).
+5. Verifica que `GET /api/Permissions/Test` responda 200.
+6. Abre `http://localhost:3000` en el navegador (usar `-SkipBrowser` para omitir este paso).
+
+Para detener todo: `docker compose down`. Para ver logs de un servicio puntual: `docker compose logs -f <servicio>` (`producer`, `frontend`, `sqlserver`, `kafka`, `elasticsearch`, `zookeeper`).
+
+### Opción A.2 — Docker Compose manual (sin el script)
+
+```bash
+docker compose up          # desde la raíz del repositorio
+```
+
+Las cadenas de conexión del contenedor `producer` se pasan por variables de entorno en `docker-compose.yaml` apuntando a los hostnames internos de la red de Docker (no a `localhost`); el `frontend`, en cambio, corre en el navegador del host, así que su `VITE_API_BASE_URL` apunta a `http://localhost:5000` (el puerto mapeado de `producer`), no a un hostname interno de Docker.
+
+La primera vez, aplicar las migraciones de EF Core contra el SQL Server del contenedor (ver comando en la Opción B, con `--connection "Server=localhost,1433;Database=SecurityDb;User Id=sa;Password=PasswordO1.;TrustServerCertificate=True"`).
+
+Probar:
+
+```bash
+curl -X GET localhost:5000/api/Permissions/Test
+# debe imprimir "Llamado"
+```
+
+Abrir `http://localhost:3000` para la interfaz web.
+
+### Opción B — Local sin Docker
+
+Requisitos: SQL Server accesible, .NET 6 SDK.
+
+1. Ajustar `Services/Security/Security.Presentation/appsettings.json` (o `appsettings.Development.json`) con tu connection string, endpoint de Kafka y de Elasticsearch.
+2. Aplicar migraciones:
+   ```bash
+   dotnet ef database update --project Services/Security/Security.Infrastructure --startup-project Services/Security/Security.Presentation
+   ```
+3. Levantar la API:
+   ```bash
+   dotnet run --project Services/Security/Security.Presentation
+   ```
+4. Swagger disponible en modo Development (`https://localhost:7014/swagger` o el puerto configurado en `launchSettings.json`).
+
+El `OutboxDispatcherService` arranca automáticamente junto con la API (no requiere ningún paso extra) y hace polling cada 5 segundos sobre la tabla `OutboxMessages`. Para verificar que un `RequestPermission`/`ModifyPermission` efectivamente notificó a Kafka/Elasticsearch, consultar esa tabla: `ProcessedAt` no nulo significa entregado; `RetryCount`/`LastError` indican reintentos en curso si Kafka o Elasticsearch no están disponibles.
+
+### Correr los tests
+
+```bash
+dotnet test Services/Security/Security.Test/Security.Test.csproj
+```
+
+Los tests son unitarios (handlers, controller, mapeo AutoMapper) más tests de repositorio contra una base EF Core InMemory — no requieren Docker ni SQL Server real.
+
+### Construir solo la imagen Docker (backend)
+
+```bash
+cd Services/Security
+docker build -t security_dotnet .
+docker run -p 5000:80 security_dotnet
+```
+
+### Frontend — modo desarrollo (sin Docker)
+
+Requisitos: Node.js 20+.
+
+```bash
+cd Services/Security/Security.Frontend
+cp .env.example .env      # ajustar VITE_API_BASE_URL si el backend no corre en localhost:5000
+npm install
+npm run dev                # sirve en http://localhost:5173 con hot-reload
+```
+
+El backend debe estar corriendo (Opción A o B) y permitir el origen `http://localhost:5173` por CORS — ya configurado en `Program.cs` (`FrontendCorsPolicy`).
+
+### Frontend — construir solo la imagen Docker
+
+```bash
+cd Services/Security/Security.Frontend
+docker build -t security_frontend --build-arg VITE_API_BASE_URL=http://localhost:5000 .
+docker run -p 3000:80 security_frontend
+```
+
+`VITE_API_BASE_URL` se debe pasar como `--build-arg` (no como variable de entorno del contenedor en runtime): Vite la incrusta en el bundle JS durante `npm run build`, así que cambiarla después de construir la imagen no tiene efecto — hay que reconstruir con el valor correcto.
+
+## 4. Limitaciones conocidas / mejoras futuras
+
+- **Sin autenticación real**: `Program.cs` llama `UseAuthorization()`, pero no hay `UseAuthentication()` ni ningún `[Authorize]` en los controllers, así que hoy es un placeholder inerte. Para producción se recomienda JWT (o el esquema de identidad que use el resto del sistema) — se dejó fuera de alcance de esta iteración por exceder lo esperado en una prueba técnica de un solo microservicio.
+- **Outbox dispatcher in-process, no distribuido**: `OutboxDispatcherService` corre como `BackgroundService` dentro del mismo proceso de la API (decisión consciente para no agregar un proyecto/contenedor nuevo). Si se escalan varias réplicas de la API, cada una correría su propio dispatcher compitiendo por las mismas filas — para producción con múltiples instancias convendría un `SELECT ... FOR UPDATE SKIP LOCKED` (o equivalente) al leer el batch pendiente, o mover el dispatcher a un Worker Service independiente con una sola réplica.
+- **Sin tests de integración contra infraestructura real**: `KafkaCommandExternal` y `ElasticSearchCommandExternal` no tienen test directo porque requerirían Kafka/Elasticsearch reales (por ejemplo vía Testcontainers). Se cubrieron indirectamente mockeando sus interfaces en los tests de los handlers y del `OutboxDispatcherService`.
+- **Validación de negocio limitada**: los validadores de FluentValidation comprueban campos vacíos/formato, pero no verifican contra la base de datos que `PermissionType` exista en `PermissionTypes` (evita acoplar `Security.Application` a `Security.Infrastructure`).
+- **Sin purga del outbox**: las filas de `OutboxMessages` ya procesadas se quedan en la tabla indefinidamente. Un job de limpieza periódico (borrar filas con `ProcessedAt` de hace más de N días) sería lo esperable en producción.
+- **CORS con orígenes hardcodeados**: `FrontendCorsPolicy` en `Program.cs` permite explícitamente `localhost:5173`/`localhost:3000`. Para un dominio de producción real habría que mover esos orígenes a `appsettings.json`/variables de entorno en vez de tenerlos fijos en el código.
+- **`PermissionType` como número libre en el frontend**: el formulario pide el Id del tipo de permiso como número porque la API no expone un endpoint para listar `PermissionTypes` — un futuro `GET /api/PermissionTypes` permitiría reemplazarlo por un `<select>`.
+- **Sin tests de frontend**: no se agregaron tests (Vitest/RTL) para los componentes React ni para las sagas — fuera de alcance de esta iteración, mencionado aquí como gap conocido.

@@ -1,6 +1,23 @@
 # N5 Challenge
 
-Poryecto con el desarrollo al problem planteado.
+Proyecto con el desarrollo del problema planteado.
+
+Para el detalle de arquitectura, patrones de diseño utilizados y guía de despliegue completa, ver [Services/Security/DOCUMENTATION.md](Services/Security/DOCUMENTATION.md).
+
+## Levantar todo con un solo comando
+
+El `docker-compose.yaml` en la raíz del repositorio centraliza la ejecución de toda la aplicación: frontend, backend y sus dependencias (SQL Server, Kafka, Elasticsearch), cada una en su propio contenedor.
+
+```powershell
+.\setup.ps1
+```
+
+Este script (PowerShell) verifica que Docker Desktop y el .NET SDK estén disponibles, construye y levanta todos los contenedores, espera a que SQL Server esté listo, aplica las migraciones de EF Core y abre la interfaz web (`http://localhost:3000`). Alternativa manual, sin el script:
+
+```bash
+docker compose up
+# luego aplicar migraciones (ver Services/Security/DOCUMENTATION.md, sección Despliegue)
+```
 
 ## Archivos de configuración
 Los archivos de configuración para base de datos, kafka y elastic search, se encuentran ubicados en:
@@ -21,10 +38,11 @@ Se encuentran en el siguiente formato:
   },
   "AllowedHosts": "*",
   "ConnectionStrings": {
-    "DefaultConnection": "Server=localhost\\SQLEXPRESS;Database=master;Trusted_Connection=True;TrustServerCertificate=True"
+    "DefaultConnection": "Server=localhost\\SQLEXPRESS;Database=SecurityDb;Trusted_Connection=True;TrustServerCertificate=True"
   },
   "ProjectConfiguration": {
     "KafkaConnection": "localhost:9092",
+    "KafkaTopic": "mytopic",
     "ElasticSearchConnection": "http://localhost:9200"
   }
 }
@@ -58,8 +76,6 @@ curl -X GET localhost:5000/api/Permissions/Test
 # debe imprimir "Llamado"
 ```
 
-Instalar con kafka y sqlserver (no garantizado en su equipo):
+Para levantar kafka, sqlserver, elasticsearch y el frontend junto con el backend, usar `docker compose up` desde la **raíz del repositorio** (no desde esta carpeta) — ver la sección "Levantar todo con un solo comando" arriba, o `.\setup.ps1`.
 
-```bash
-docker compose up
-```
+La interfaz web (`Services/Security/Security.Frontend`, React + TypeScript + Redux Toolkit/Saga + Bootstrap) queda disponible en `http://localhost:3000`. Ver [Services/Security/DOCUMENTATION.md](Services/Security/DOCUMENTATION.md) para correrla en modo desarrollo o construir su imagen por separado.

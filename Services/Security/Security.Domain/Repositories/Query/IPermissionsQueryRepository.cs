@@ -22,6 +22,6 @@ namespace Security.Domain.Repositories.Query
         /// </summary>
         /// <param name="id">Permission identifier</param>
         /// <returns>Permission</returns>
-        Task<Permissions> GetPermissionAsync(Int64 id);
+        Task<Permissions> GetPermissionAsync(int id);
     }
 }

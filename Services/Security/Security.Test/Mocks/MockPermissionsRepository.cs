@@ -42,7 +42,7 @@ namespace Security.Test.Mocks
             var mockRepo = new Mock<IPermissionsQueryRepository>();
 
             mockRepo.Setup(r => r.GetPermissionsAsync()).ReturnsAsync(leaveTypes);
-            mockRepo.Setup(r => r.GetPermissionAsync(It.IsAny<long>())).ReturnsAsync(leaveTypes[0]);
+            mockRepo.Setup(r => r.GetPermissionAsync(It.IsAny<int>())).ReturnsAsync(leaveTypes[0]);
 
             return mockRepo;
         }

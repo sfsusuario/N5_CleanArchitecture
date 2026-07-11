@@ -12,7 +12,7 @@ namespace Security.Domain.CQRS.Repository.Commands
         /// <summary>
         /// Employee identifier
         /// </summary>
-        public long Id { get; set; }
+        public int Id { get; set; }
 
         /// <summary>
         /// Employee forename

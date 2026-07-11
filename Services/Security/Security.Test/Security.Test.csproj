@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="11.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="6.0.5" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
     <PackageReference Include="Moq" Version="4.18.1" />
     <PackageReference Include="Shouldly" Version="4.0.3" />
@@ -27,6 +28,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Security.Application\Security.Application.csproj" />
     <ProjectReference Include="..\Security.Domain\Security.Domain.csproj" />
+    <ProjectReference Include="..\Security.Infrastructure\Security.Infrastructure.csproj" />
+    <ProjectReference Include="..\Security.Presentation\Security.Presentation.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
+using Security.Domain.Entities;
+using Security.Domain.External.Command.Base;
 using Security.Domain.Repositories.Command;
 using Security.Domain.Repositories.Query;
 
@@ -23,8 +23,31 @@ namespace Security.Domain.Contracts.Persistence
         public IPermissionsCommandRepository PermissionsCommandRepository { get; }
 
         /// <summary>
+        /// Outbox repository. Handlers write to this instead of calling Kafka/Elasticsearch
+        /// directly, so the notification is committed atomically with the business change.
+        /// </summary>
+        public ICommandExternal<OutboxMessage> OutboxMessages { get; }
+
+        /// <summary>
         /// Permissions save repository
         /// </summary>
         public Task Save();
+
+        /// <summary>
+        /// Starts an explicit DB transaction, needed when a handler must call Save() more than
+        /// once (e.g. to obtain a database-generated Id before writing an outbox row that
+        /// references it) while still committing everything atomically.
+        /// </summary>
+        public Task BeginTransactionAsync();
+
+        /// <summary>
+        /// Commits the transaction started by <see cref="BeginTransactionAsync"/>.
+        /// </summary>
+        public Task CommitTransactionAsync();
+
+        /// <summary>
+        /// Rolls back the transaction started by <see cref="BeginTransactionAsync"/>.
+        /// </summary>
+        public Task RollbackTransactionAsync();
     }
 }

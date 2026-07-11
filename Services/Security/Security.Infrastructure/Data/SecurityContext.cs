@@ -18,6 +18,10 @@ namespace Security.Infrastructure.Data
         {
             modelBuilder.Entity<Permissions>()
             .HasOne(e => e.PermissionTypeRef);
+
+            // Speeds up the dispatcher's "pending messages" poll (WHERE ProcessedAt IS NULL).
+            modelBuilder.Entity<OutboxMessage>()
+                .HasIndex(m => m.ProcessedAt);
         }
 
         /// <summary>
@@ -26,8 +30,13 @@ namespace Security.Infrastructure.Data
         public DbSet<Permissions> Permissions { get; set; }
 
         /// <summary>
-        /// Permissions customers
+        /// Permission types lookup table (Vacation, Sick leave, etc.)
         /// </summary>
-        public DbSet<PermissionsType> Customers { get; set; }
+        public DbSet<PermissionsType> PermissionTypes { get; set; }
+
+        /// <summary>
+        /// Outbox pattern table: see <see cref="OutboxMessage"/>.
+        /// </summary>
+        public DbSet<OutboxMessage> OutboxMessages { get; set; }
     }
 }
