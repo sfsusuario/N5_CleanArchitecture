@@ -12,7 +12,7 @@ El servicio sigue **Clean Architecture** (también llamada Onion Architecture): 
 Services/Security/
 ├── Security.Domain          Entidades, contratos (interfaces), comandos/queries CQRS. No depende de nada más.
 ├── Security.Application     Casos de uso: handlers de MediatR, mapeo con AutoMapper, validación con FluentValidation.
-├── Security.Infrastructure  Implementaciones concretas: EF Core (SQL Server), Kafka, Elasticsearch.
+├── Security.Infrastructure  Implementaciones concretas: EF Core (PostgreSQL/Npgsql), Kafka, Elasticsearch.
 ├── Security.Presentation    API REST (ASP.NET Core): controllers, Program.cs (composition root), Swagger.
 ├── Security.Test            Tests unitarios (xUnit + Moq + Shouldly) y de repositorio (EF Core InMemory).
 └── Security.Frontend        SPA React + TypeScript que consume la API (ver sección 1.1).
@@ -42,7 +42,7 @@ Security.Frontend/src/
 └── components/                        Layout, PermissionsList, PermissionForm
 ```
 
-Funcionalidad: lista de permisos (`GetPermissions`), alta (`RequestPermission`) y edición (`ModifyPermission`) desde un único formulario, con recarga automática de la lista tras cada operación exitosa (la saga despacha `fetchPermissionsRequested` al finalizar). El campo "Tipo de permiso" es un `<select>` poblado desde `GET /api/PermissionTypes` (`permissionTypesSlice`/`permissionTypesSaga`, mismo patrón que `permissions`) en vez de un Id numérico libre.
+Funcionalidad: lista de permisos (`GetPermissions`), alta (`RequestPermission`) y edición (`ModifyPermission`) desde un único formulario, con recarga automática de la lista tras cada operación exitosa (la saga despacha `fetchPermissionsRequested` al finalizar). El campo "Tipo de permiso" es un `<select>` poblado desde `GET /api/PermissionTypes` (`permissionTypesSlice`/`permissionTypesSaga`, mismo patrón que `permissions`) en vez de un Id numérico libre; el link "+ Nuevo tipo" junto al label despliega un mini-formulario inline que llama a `POST /api/PermissionTypes` y refresca la lista al terminar.
 
 Referencias de proyecto (siempre hacia adentro):
 
@@ -65,7 +65,7 @@ PermissionsController.RequestPermission()          (Presentation)
 RequestPermissionHandler.Handle()                   (Application)
    │  1. Mapea RequestPermissionCommand → Permissions (AutoMapper)
    │  2. BeginTransactionAsync()
-   │  3. _repoCommand.RequestAsync(entity) + Save()    (persiste en SQL Server ← fuente de verdad,
+   │  3. _repoCommand.RequestAsync(entity) + Save()    (persiste en PostgreSQL ← fuente de verdad,
    │                                                     y genera el Id autoincremental)
    │  4. OutboxMessages.RequestAsync(...) x2 + Save()  (escribe 2 filas: canal Kafka y canal
    │                                                     Elasticsearch, con el Id ya conocido)
@@ -89,11 +89,13 @@ Kafka topic "mytopic" / índice Elasticsearch "permissions" actualizados
 
 | Servicio | Uso | Cliente |
 |---|---|---|
-| SQL Server | Persistencia de `Permissions`, `PermissionTypes` y `OutboxMessages` | EF Core 6 (`SecurityContext`) |
+| PostgreSQL | Persistencia de `Permissions`, `PermissionTypes` y `OutboxMessages` | EF Core 6 (`SecurityContext`) vía `Npgsql.EntityFrameworkCore.PostgreSQL` |
 | Kafka | Evento de auditoría por cada operación (REQUEST/MODIFY/GET) | Confluent.Kafka, vía `OutboxDispatcherService` (REQUEST/MODIFY) o directo (GET) |
 | Elasticsearch | Índice de búsqueda de permisos (`permissions`) | NEST, vía `OutboxDispatcherService` |
 
-SQL Server es la única fuente de verdad transaccional. Gracias al patrón Outbox, un `RequestPermission`/`ModifyPermission` exitoso ya no depende de que Kafka o Elasticsearch estén disponibles en ese instante — sus notificaciones quedan garantizadas por el `OutboxDispatcherService`, que reintenta indefinidamente hasta lograr entregarlas.
+PostgreSQL es la única fuente de verdad transaccional. Gracias al patrón Outbox, un `RequestPermission`/`ModifyPermission` exitoso ya no depende de que Kafka o Elasticsearch estén disponibles en ese instante — sus notificaciones quedan garantizadas por el `OutboxDispatcherService`, que reintenta indefinidamente hasta lograr entregarlas.
+
+> **Nota de diseño — por qué PostgreSQL y no SQL Server**: el proyecto originalmente usaba SQL Server, pero su imagen de Linux (`sqlpal`, la capa de emulación de APIs de Windows que usan *todas* las variantes de SQL Server para contenedores, incluida Azure SQL Edge) resultó incompatible con Docker Desktop/WSL2 en algunas máquinas — crasheaba al iniciar sin importar la versión probada (2019, 2022, Azure SQL Edge). PostgreSQL es un binario Linux nativo sin esa capa de compatibilidad, arranca en segundos, y el esquema de este proyecto (3 tablas simples, sin stored procedures ni features específicas de T-SQL) migró sin fricción. Un efecto colateral del cambio: `PermissionDate` se mapea explícitamente como `date` de Postgres (no `timestamp with time zone`) en `SecurityContext.OnModelCreating`, porque Npgsql 6+ exige que todo `DateTime` escrito en una columna `timestamptz` tenga `Kind = Utc`, y la fecha que manda el frontend no lo tiene — mapearla como `date` evita el problema de raíz y es semánticamente más correcto para un dato que no tiene componente horario.
 
 ## 2. Patrones de diseño y ubicación en el código
 
@@ -115,7 +117,7 @@ SQL Server es la única fuente de verdad transaccional. Gracias al patrón Outbo
 
 ### Opción A — `setup.ps1` (recomendado: todo automatizado)
 
-El `docker-compose.yaml` que centraliza la ejecución de toda la aplicación (frontend, backend y sus 4 dependencias — SQL Server, Kafka, Elasticsearch, Zookeeper, cada una en su propio contenedor) vive en la **raíz del repositorio**. `setup.ps1` (también en la raíz) automatiza todo el flujo sobre ese archivo:
+El `docker-compose.yaml` que centraliza la ejecución de toda la aplicación (frontend, backend y sus 4 dependencias — PostgreSQL, Kafka, Elasticsearch, Zookeeper, cada una en su propio contenedor) vive en la **raíz del repositorio**. `setup.ps1` (también en la raíz) automatiza todo el flujo sobre ese archivo:
 
 ```powershell
 .\setup.ps1
@@ -125,12 +127,12 @@ Paso a paso, el script:
 
 1. Verifica que Docker Desktop esté corriendo y que el .NET SDK esté instalado (instala la herramienta `dotnet-ef` si falta).
 2. `docker compose build` + `docker compose up -d` — construye y levanta los 6 contenedores.
-3. Espera (con reintentos) a que SQL Server acepte conexiones dentro del contenedor.
-4. Aplica las migraciones de EF Core contra ese SQL Server (`dotnet ef database update --connection "Server=localhost,1433;..."`, sin tocar ningún SQL Server local que tengas instalado).
+3. Espera (con reintentos) a que PostgreSQL acepte conexiones dentro del contenedor.
+4. Aplica las migraciones de EF Core contra ese PostgreSQL (`dotnet ef database update --connection "Host=localhost;Port=5433;..."`, sin tocar ningún PostgreSQL local que tengas instalado — el contenedor publica en el puerto 5433 del host, no el 5432 por defecto, justamente para evitar ese choque).
 5. Verifica que `GET /api/Permissions/Test` responda 200.
 6. Abre `http://localhost:3000` en el navegador (usar `-SkipBrowser` para omitir este paso).
 
-Para detener todo: `docker compose down`. Para ver logs de un servicio puntual: `docker compose logs -f <servicio>` (`producer`, `frontend`, `sqlserver`, `kafka`, `elasticsearch`, `zookeeper`).
+Para detener todo: `docker compose down`. Para ver logs de un servicio puntual: `docker compose logs -f <servicio>` (`producer`, `frontend`, `postgres`, `kafka`, `kafka-ui`, `elasticsearch`, `zookeeper`).
 
 ### Opción A.2 — Docker Compose manual (sin el script)
 
@@ -140,7 +142,7 @@ docker compose up          # desde la raíz del repositorio
 
 Las cadenas de conexión del contenedor `producer` se pasan por variables de entorno en `docker-compose.yaml` apuntando a los hostnames internos de la red de Docker (no a `localhost`); el `frontend`, en cambio, corre en el navegador del host, así que su `VITE_API_BASE_URL` apunta a `http://localhost:5080` (el puerto mapeado de `producer`), no a un hostname interno de Docker.
 
-La primera vez, aplicar las migraciones de EF Core contra el SQL Server del contenedor (ver comando en la Opción B, con `--connection "Server=localhost,1433;Database=SecurityDb;User Id=sa;Password=PasswordO1.;TrustServerCertificate=True"`).
+La primera vez, aplicar las migraciones de EF Core contra el PostgreSQL del contenedor (ver comando en la Opción B, con `--connection "Host=localhost;Port=5433;Database=SecurityDb;Username=postgres;Password=PasswordO1."`).
 
 Probar:
 
@@ -153,9 +155,9 @@ Abrir `http://localhost:3000` para la interfaz web.
 
 ### Opción B — Local sin Docker
 
-Requisitos: SQL Server accesible, .NET 6 SDK.
+Requisitos: PostgreSQL accesible, .NET 6 SDK.
 
-1. Ajustar `Services/Security/Security.Presentation/appsettings.json` (o `appsettings.Development.json`) con tu connection string, endpoint de Kafka y de Elasticsearch.
+1. Ajustar `Services/Security/Security.Presentation/appsettings.json` (o `appsettings.Development.json`) con tu connection string (formato `Host=...;Port=5432;Database=...;Username=...;Password=...`), endpoint de Kafka y de Elasticsearch.
 2. Aplicar migraciones:
    ```bash
    dotnet ef database update --project Services/Security/Security.Infrastructure --startup-project Services/Security/Security.Presentation
@@ -174,7 +176,7 @@ El `OutboxDispatcherService` arranca automáticamente junto con la API (no requi
 dotnet test Services/Security/Security.Test/Security.Test.csproj
 ```
 
-Los tests son unitarios (handlers, controller, mapeo AutoMapper) más tests de repositorio contra una base EF Core InMemory — no requieren Docker ni SQL Server real.
+Los tests son unitarios (handlers, controller, mapeo AutoMapper) más tests de repositorio contra una base EF Core InMemory — no requieren Docker ni PostgreSQL real.
 
 ### Construir solo la imagen Docker (backend)
 
@@ -206,6 +208,12 @@ docker run -p 3000:80 security_frontend
 ```
 
 `VITE_API_BASE_URL` se debe pasar como `--build-arg` (no como variable de entorno del contenedor en runtime): Vite la incrusta en el bundle JS durante `npm run build`, así que cambiarla después de construir la imagen no tiene efecto — hay que reconstruir con el valor correcto.
+
+### Troubleshooting: el contenedor `postgres` no publica en el puerto esperado
+
+Si ya tenés un PostgreSQL corriendo nativo en el host (Windows lo instala como servicio y queda escuchando en `5432`), el contenedor `postgres` de este proyecto **no** choca con él porque se publica en el puerto `5433` del host (`docker-compose.yaml`: `"5433:5432"`) — internamente, dentro de la red de Docker, sigue siendo el puerto `5432` estándar. Si necesitás conectarte con un cliente externo (pgAdmin, DBeaver, `psql`) al Postgres del contenedor, usá `localhost:5433`, no `5432`.
+
+(Nota histórica: la base de datos original de este proyecto era SQL Server, pero su imagen de Linux resultó incompatible con Docker Desktop/WSL2 en algunas máquinas — ver la nota de diseño en la sección "Servicios externos" más arriba.)
 
 ## 4. Limitaciones conocidas / mejoras futuras
 

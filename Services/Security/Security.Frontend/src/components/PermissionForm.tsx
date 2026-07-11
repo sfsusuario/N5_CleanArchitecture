@@ -14,8 +14,10 @@ interface PermissionFormProps {
   submitting: boolean;
   permissionTypes: PermissionType[];
   permissionTypesLoading: boolean;
+  permissionTypesSubmitting: boolean;
   onSubmit: (values: PermissionFormValues, editingId: number | null) => void;
   onCancelEdit: () => void;
+  onCreatePermissionType: (description: string) => void;
 }
 
 const emptyForm: PermissionFormValues = {
@@ -30,10 +32,14 @@ export function PermissionForm({
   submitting,
   permissionTypes,
   permissionTypesLoading,
+  permissionTypesSubmitting,
   onSubmit,
   onCancelEdit,
+  onCreatePermissionType,
 }: PermissionFormProps) {
   const [values, setValues] = useState<PermissionFormValues>(emptyForm);
+  const [showNewType, setShowNewType] = useState(false);
+  const [newTypeDescription, setNewTypeDescription] = useState("");
 
   useEffect(() => {
     if (editingPermission) {
@@ -54,6 +60,16 @@ export function PermissionForm({
     if (!editingPermission) {
       setValues(emptyForm);
     }
+  };
+
+  const handleCreateType = (event: FormEvent) => {
+    event.preventDefault();
+    if (!newTypeDescription.trim()) {
+      return;
+    }
+    onCreatePermissionType(newTypeDescription.trim());
+    setNewTypeDescription("");
+    setShowNewType(false);
   };
 
   return (
@@ -84,7 +100,18 @@ export function PermissionForm({
             </Col>
             <Col md={6}>
               <Form.Group controlId="permissionType">
-                <Form.Label>Tipo de permiso</Form.Label>
+                <div className="d-flex justify-content-between align-items-center">
+                  <Form.Label className="mb-0">Tipo de permiso</Form.Label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="p-0"
+                    onClick={() => setShowNewType((current) => !current)}
+                  >
+                    {showNewType ? "Cancelar" : "+ Nuevo tipo"}
+                  </Button>
+                </div>
                 <Form.Select
                   required
                   disabled={permissionTypesLoading}
@@ -100,6 +127,26 @@ export function PermissionForm({
                     </option>
                   ))}
                 </Form.Select>
+                {showNewType && (
+                  <div className="d-flex gap-2 mt-2">
+                    <Form.Control
+                      size="sm"
+                      placeholder="Nombre del nuevo tipo (ej. Vacaciones)"
+                      value={newTypeDescription}
+                      onChange={(e) => setNewTypeDescription(e.target.value)}
+                      disabled={permissionTypesSubmitting}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline-primary"
+                      onClick={handleCreateType}
+                      disabled={permissionTypesSubmitting || !newTypeDescription.trim()}
+                    >
+                      {permissionTypesSubmitting ? "Agregando…" : "Agregar"}
+                    </Button>
+                  </div>
+                )}
               </Form.Group>
             </Col>
             <Col md={6}>

@@ -23,6 +23,7 @@ namespace Security.Infrastructure.Repository
         private IPermissionsQueryRepository _permissionQueryRepository;
         private IPermissionsCommandRepository _permissionCommandRepository;
         private IPermissionTypesQueryRepository _permissionTypesQueryRepository;
+        private IPermissionTypesCommandRepository _permissionTypesCommandRepository;
         private ICommandExternal<OutboxMessage> _outboxMessages;
         private IDbContextTransaction _transaction;
 
@@ -49,6 +50,13 @@ namespace Security.Infrastructure.Repository
         /// </summary>
         public IPermissionTypesQueryRepository PermissionTypesQueryRepository =>
             _permissionTypesQueryRepository ??= new PermissionTypesQueryRepository(_context);
+
+        /// <summary>
+        /// Get permission types command repository. Reuses the generic CommandRepository&lt;T&gt;
+        /// like OutboxMessages does — creating a PermissionsType is just tracking a new row.
+        /// </summary>
+        public IPermissionTypesCommandRepository PermissionTypesCommandRepository =>
+            _permissionTypesCommandRepository ??= new PermissionTypesCommandRepository(_context);
 
         /// <summary>
         /// Outbox repository. Reuses the generic CommandRepository&lt;T&gt; already used by

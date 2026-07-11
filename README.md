@@ -6,13 +6,13 @@ Para el detalle de arquitectura, patrones de diseño utilizados y guía de despl
 
 ## Levantar todo con un solo comando
 
-El `docker-compose.yaml` en la raíz del repositorio centraliza la ejecución de toda la aplicación: frontend, backend y sus dependencias (SQL Server, Kafka, Elasticsearch), cada una en su propio contenedor.
+El `docker-compose.yaml` en la raíz del repositorio centraliza la ejecución de toda la aplicación: frontend, backend y sus dependencias (PostgreSQL, Kafka, Kafka UI, Elasticsearch), cada una en su propio contenedor.
 
 ```powershell
 .\setup.ps1
 ```
 
-Este script (PowerShell) verifica que Docker Desktop y el .NET SDK estén disponibles, construye y levanta todos los contenedores, espera a que SQL Server esté listo, aplica las migraciones de EF Core y abre la interfaz web (`http://localhost:3000`). Alternativa manual, sin el script:
+Este script (PowerShell) verifica que Docker Desktop y el .NET SDK estén disponibles, construye y levanta todos los contenedores, espera a que PostgreSQL esté listo, aplica las migraciones de EF Core y abre la interfaz web (`http://localhost:3000`). Alternativa manual, sin el script:
 
 ```bash
 docker compose up
@@ -38,7 +38,7 @@ Se encuentran en el siguiente formato:
   },
   "AllowedHosts": "*",
   "ConnectionStrings": {
-    "DefaultConnection": "Server=localhost\\SQLEXPRESS;Database=SecurityDb;Trusted_Connection=True;TrustServerCertificate=True"
+    "DefaultConnection": "Host=localhost;Port=5432;Database=SecurityDb;Username=postgres;Password=PasswordO1."
   },
   "ProjectConfiguration": {
     "KafkaConnection": "localhost:9092",
@@ -76,6 +76,6 @@ curl -X GET localhost:5080/api/Permissions/Test
 # debe imprimir "Llamado"
 ```
 
-Para levantar kafka, sqlserver, elasticsearch y el frontend junto con el backend, usar `docker compose up` desde la **raíz del repositorio** (no desde esta carpeta) — ver la sección "Levantar todo con un solo comando" arriba, o `.\setup.ps1`.
+Para levantar kafka, postgres, elasticsearch y el frontend junto con el backend, usar `docker compose up` desde la **raíz del repositorio** (no desde esta carpeta) — ver la sección "Levantar todo con un solo comando" arriba, o `.\setup.ps1`.
 
 La interfaz web (`Services/Security/Security.Frontend`, React + TypeScript + Redux Toolkit/Saga + Bootstrap) queda disponible en `http://localhost:3000`. Ver [Services/Security/DOCUMENTATION.md](Services/Security/DOCUMENTATION.md) para correrla en modo desarrollo o construir su imagen por separado.

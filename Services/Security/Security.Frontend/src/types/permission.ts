@@ -5,6 +5,11 @@ export interface PermissionType {
   description: string | null;
 }
 
+// Body for POST /api/PermissionTypes (CreatePermissionTypeCommand)
+export interface CreatePermissionTypePayload {
+  description: string;
+}
+
 // Returned by GET /api/Permissions/GetPermissions (List<Permissions>)
 export interface Permission {
   id: number;

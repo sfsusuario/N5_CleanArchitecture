@@ -5,10 +5,11 @@
 .DESCRIPTION
     - Verifica que Docker Desktop y el .NET SDK esten disponibles (instala la herramienta
       dotnet-ef si falta).
-    - Construye y levanta todo el stack con Docker Compose: zookeeper, kafka, sqlserver,
+    - Construye y levanta todo el stack con Docker Compose: zookeeper, kafka, postgres,
       elasticsearch, el backend (producer) y el frontend.
-    - Espera a que SQL Server acepte conexiones y aplica las migraciones de EF Core contra
-      el contenedor (sin tocar tu SQL Server local, si tuvieras uno).
+    - Espera a que PostgreSQL acepte conexiones y aplica las migraciones de EF Core contra
+      el contenedor (publicado en el host en el puerto 5433, no 5432, para no chocar con un
+      PostgreSQL local si ya tuvieras uno instalado).
     - Verifica que la API responda y abre el frontend en el navegador.
 
     Nota: el backend se publica en el host en el puerto 5080 (no 5000). En muchas maquinas
@@ -33,8 +34,8 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = $PSScriptRoot
 Set-Location $RepoRoot
 
-$SqlSaPassword = 'PasswordO1.'
-$SqlConnectionString = "Server=localhost,1433;Database=SecurityDb;User Id=sa;Password=$SqlSaPassword;TrustServerCertificate=True"
+$PostgresPassword = 'PasswordO1.'
+$PostgresConnectionString = "Host=localhost;Port=5433;Database=SecurityDb;Username=postgres;Password=$PostgresPassword"
 
 function Write-Step {
     param([string]$Message)
@@ -110,48 +111,47 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Step "Levantando el stack (zookeeper, kafka, sqlserver, elasticsearch, backend, frontend)"
+Write-Step "Levantando el stack (zookeeper, kafka, postgres, elasticsearch, backend, frontend)"
 docker compose up -d
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Fallo 'docker compose up'. Revisa el mensaje de arriba." -ForegroundColor Red
     exit 1
 }
 
-# 3. Esperar a que SQL Server acepte conexiones -------------------------------
-Write-Step "Esperando a que SQL Server este listo"
+# 3. Esperar a que PostgreSQL acepte conexiones -------------------------------
+Write-Step "Esperando a que PostgreSQL este listo"
 
 $maxAttempts = 30
 $attempt = 0
-$sqlReady = $false
+$pgReady = $false
 
-while ($attempt -lt $maxAttempts -and -not $sqlReady) {
+while ($attempt -lt $maxAttempts -and -not $pgReady) {
     $attempt++
     $probeExitCode = Invoke-NativeCommandQuiet -FilePath 'docker' -ArgumentList `
-        'compose', 'exec', '-T', 'sqlserver', '/opt/mssql-tools/bin/sqlcmd', `
-        '-S', 'localhost', '-U', 'sa', '-P', $SqlSaPassword, '-Q', 'SELECT 1'
+        'compose', 'exec', '-T', 'postgres', 'pg_isready', '-U', 'postgres'
     if ($probeExitCode -eq 0) {
-        $sqlReady = $true
+        $pgReady = $true
     }
     else {
-        Write-Host "  SQL Server todavia no responde (intento $attempt/$maxAttempts)..."
+        Write-Host "  PostgreSQL todavia no responde (intento $attempt/$maxAttempts)..."
         Start-Sleep -Seconds 3
     }
 }
 
-if (-not $sqlReady) {
-    Write-Host "SQL Server no respondio a tiempo. Revisa 'docker compose logs sqlserver' y vuelve a intentar." -ForegroundColor Red
+if (-not $pgReady) {
+    Write-Host "PostgreSQL no respondio a tiempo. Revisa 'docker compose logs postgres'." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "SQL Server listo." -ForegroundColor Green
+Write-Host "PostgreSQL listo." -ForegroundColor Green
 
 # 4. Migraciones de EF Core ----------------------------------------------------
-Write-Step "Aplicando migraciones de EF Core contra el SQL Server del contenedor"
+Write-Step "Aplicando migraciones de EF Core contra el PostgreSQL del contenedor"
 
 dotnet ef database update `
     --project Services/Security/Security.Infrastructure `
     --startup-project Services/Security/Security.Presentation `
-    --connection $SqlConnectionString
+    --connection $PostgresConnectionString
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Las migraciones fallaron. Revisa el mensaje de error de arriba." -ForegroundColor Red
@@ -192,9 +192,11 @@ if (-not $SkipBrowser) {
 
 Write-Host ""
 Write-Host "Listo. Servicios disponibles:" -ForegroundColor Cyan
-Write-Host "  Frontend:  http://localhost:3000"
-Write-Host "  API:       http://localhost:5080/api/Permissions/Test"
+Write-Host "  Frontend:      http://localhost:3000"
+Write-Host "  API:           http://localhost:5080/api/Permissions/Test"
+Write-Host "  Kafka UI:      http://localhost:8080"
 Write-Host "  ElasticSearch: http://localhost:9200"
+Write-Host "  PostgreSQL:    localhost:5433 (db SecurityDb, user postgres)"
 Write-Host ""
 Write-Host "Para ver logs:   docker compose logs -f [servicio]"
 Write-Host "Para detener:    docker compose down"

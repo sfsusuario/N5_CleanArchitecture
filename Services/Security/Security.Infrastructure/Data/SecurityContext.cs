@@ -19,6 +19,16 @@ namespace Security.Infrastructure.Data
             modelBuilder.Entity<Permissions>()
             .HasOne(e => e.PermissionTypeRef);
 
+            // PermissionDate is a calendar date with no time-of-day/timezone meaning, and the
+            // frontend sends a plain date string that deserializes with DateTime.Kind=Unspecified.
+            // Npgsql 6+ throws at runtime if an Unspecified-kind DateTime is written to
+            // "timestamp with time zone" (its default mapping for DateTime), so map this
+            // column as Postgres "date" instead — sidesteps the Kind check entirely and is the
+            // more correct type for the data anyway.
+            modelBuilder.Entity<Permissions>()
+                .Property(p => p.PermissionDate)
+                .HasColumnType("date");
+
             // Speeds up the dispatcher's "pending messages" poll (WHERE ProcessedAt IS NULL).
             modelBuilder.Entity<OutboxMessage>()
                 .HasIndex(m => m.ProcessedAt);

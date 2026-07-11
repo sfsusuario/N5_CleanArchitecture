@@ -1,7 +1,9 @@
 using Moq;
 using Security.Domain.Entities;
+using Security.Domain.Repositories.Command;
 using Security.Domain.Repositories.Query;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Security.Test.Mocks
 {
@@ -20,6 +22,16 @@ namespace Security.Test.Mocks
 
             var mockRepo = new Mock<IPermissionTypesQueryRepository>();
             mockRepo.Setup(r => r.GetAllAsync()).ReturnsAsync(permissionTypes);
+
+            return mockRepo;
+        }
+
+        public static Mock<IPermissionTypesCommandRepository> GetCommandRepository()
+        {
+            var mockRepo = new Mock<IPermissionTypesCommandRepository>();
+
+            mockRepo.Setup(r => r.RequestAsync(It.IsAny<PermissionsType>()))
+                .Returns((PermissionsType type) => Task.FromResult(type));
 
             return mockRepo;
         }

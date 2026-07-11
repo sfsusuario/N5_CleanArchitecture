@@ -38,20 +38,25 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2019-CU3-ubuntu-18.04
-    user: '0:0'
-    container_name: sqlserver
+  postgres:
+    # Replaces SQL Server: sqlpal (SQL Server's Windows-API-emulation layer for Linux, shared by
+    # every mssql/server and azure-sql-edge image) reliably crashed on startup on some hosts —
+    # see DOCUMENTATION.md "Troubleshooting" for the full investigation. Postgres is a native
+    # Linux binary with no such compatibility layer, and starts in ~2-3s instead.
+    image: postgres:16-alpine
+    hostname: postgres
+    container_name: postgres
     ports:
-      - 1433:1433
-    links:
-     - kafka
+      # Host port 5433 (not 5432): many dev machines already run a native PostgreSQL service on
+      # 5432 (as this one did) — mapping to the same host port would collide with it. The 5433
+      # only affects host-side access; producer talks to this container over 5432 internally.
+      - "5433:5432"
     environment:
-      ACCEPT_EULA: Y
-      SA_PASSWORD: PasswordO1.
-      MSSQL_PID: Express
+      POSTGRES_DB: SecurityDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: PasswordO1.
     volumes:
-      - ~/docker/sqlserver-data:/var/opt/mssql
+      - ~/docker/postgres-data:/var/lib/postgresql/data
   elasticsearch:
     # Pinned to a later 7.17.x patch (not 7.17.5) because that tag's bundled JDK crashes on
     # startup under cgroups v2 (common on Docker Desktop + WSL2): "NullPointerException:
@@ -75,11 +80,11 @@ services:
       - "5080:80"
     links:
      - kafka
-     - sqlserver
+     - postgres
      - elasticsearch
     environment:
       ASPNETCORE_ENVIRONMENT: docker
-      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=SecurityDb;User Id=sa;Password=PasswordO1.;TrustServerCertificate=True"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=SecurityDb;Username=postgres;Password=PasswordO1."
       ProjectConfiguration__KafkaConnection: "kafka:9092"
       ProjectConfiguration__KafkaTopic: "mytopic"
       ProjectConfiguration__ElasticSearchConnection: "http://elasticsearch:9200"

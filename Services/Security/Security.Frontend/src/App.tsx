@@ -8,15 +8,20 @@ import {
   modifyPermissionRequested,
   requestPermissionRequested,
 } from "./store/permissions/permissionsSlice";
-import { fetchPermissionTypesRequested } from "./store/permissionTypes/permissionTypesSlice";
+import {
+  createPermissionTypeRequested,
+  fetchPermissionTypesRequested,
+} from "./store/permissionTypes/permissionTypesSlice";
 import type { Permission } from "./types/permission";
 
 export default function App() {
   const dispatch = useAppDispatch();
   const { items, loading, submitting, error } = useAppSelector((state) => state.permissions);
-  const { items: permissionTypes, loading: permissionTypesLoading } = useAppSelector(
-    (state) => state.permissionTypes
-  );
+  const {
+    items: permissionTypes,
+    loading: permissionTypesLoading,
+    submitting: permissionTypesSubmitting,
+  } = useAppSelector((state) => state.permissionTypes);
   const [editingPermission, setEditingPermission] = useState<Permission | null>(null);
 
   useEffect(() => {
@@ -40,8 +45,12 @@ export default function App() {
         submitting={submitting}
         permissionTypes={permissionTypes}
         permissionTypesLoading={permissionTypesLoading}
+        permissionTypesSubmitting={permissionTypesSubmitting}
         onSubmit={handleSubmit}
         onCancelEdit={() => setEditingPermission(null)}
+        onCreatePermissionType={(description) =>
+          dispatch(createPermissionTypeRequested({ description }))
+        }
       />
       <PermissionsList items={items} loading={loading} error={error} onEdit={setEditingPermission} />
     </Layout>

@@ -47,9 +47,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure SQL server
+// Configure PostgreSQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<SecurityContext>( options => options.UseSqlServer(connectionString));
+builder.Services.AddDbContext<SecurityContext>( options => options.UseNpgsql(connectionString));
 builder.Services.Configure<ProjectConfiguration>(builder.Configuration.GetSection(nameof(ProjectConfiguration)));
 
 // Register dependencies

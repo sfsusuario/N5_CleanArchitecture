@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Security.Domain.CQRS.Repository.Commands;
 using Security.Domain.CQRS.Repository.Queries;
 using Security.Domain.Entities;
 using System;
@@ -41,6 +42,35 @@ namespace Security.Presentation.Controllers
             catch (Exception exp)
             {
                 this._logger.LogError("GetPermissionTypes error: " + exp.Message);
+                return BadRequest(exp.Message);
+            }
+        }
+
+        /// <summary>
+        /// Create a new permission type
+        /// </summary>
+        /// <param name="command">Create permission type command</param>
+        /// <returns>ActionResult</returns>
+        [HttpPost]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<ActionResult<PermissionsType>> Create([FromBody] CreatePermissionTypeCommand command)
+        {
+            try
+            {
+                if (command != null)
+                {
+                    var result = await _mediator.Send(command);
+                    this._logger.LogInformation("CreatePermissionType success - #" + result.Id);
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest();
+                }
+            }
+            catch (Exception exp)
+            {
+                this._logger.LogError("CreatePermissionType error: " + exp.Message);
                 return BadRequest(exp.Message);
             }
         }
